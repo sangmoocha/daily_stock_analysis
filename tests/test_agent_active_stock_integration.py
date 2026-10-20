@@ -207,6 +207,7 @@ def test_convergence_builtin_asset_contracts_match_actual_factory():
         "get_realtime_quote": ("stock", "index"), "get_daily_history": ("stock", "index"),
         "get_chip_distribution": ("stock",), "get_analysis_context": ("stock", "index"),
         "get_stock_info": ("stock",), "get_capital_flow": ("stock",),
+        "get_investor_flow": ("stock",),
         "analyze_trend": ("stock", "index"), "calculate_ma": ("stock", "index"),
         "get_volume_analysis": ("stock", "index"), "analyze_pattern": ("stock", "index"),
         "search_stock_news": ("stock", "index"), "search_comprehensive_intel": ("stock", "index"),
@@ -2348,6 +2349,96 @@ def test_full_registered_name_owns_embedded_mentions(bundled_chat_stock_index, m
         assert {identity.stock_code for identity in decision.participants} == {"600584", "600900"}
 
 
+@pytest.mark.parametrize("message,code", [
+    ("삼성전자 어때?", "005930.KS"),
+    ("삼성전자 분석해줘", "005930.KS"),
+    ("삼성전자 수급 어때?", "005930.KS"),
+    ("삼성전자 지금 어때", "005930.KS"),
+    ("005930.KS 어때?", "005930.KS"),
+    ("카카오 어때", "035720.KS"),
+    ("SK하이닉스 어때?", "000660.KS"),
+])
+def test_korean_object_question_binds_leading_subject(bundled_chat_stock_index, message, code):
+    from src.agent.chat_object_decision import decide_chat_object
+    from src.services.agent_chat_session_service import _stock_lookup
+
+    registry, lookup = _stock_lookup()
+    decision = decide_chat_object(message, None, registry, lookup)
+
+    assert decision.kind == "confirm"
+    assert decision.target is not None
+    assert decision.target.identity.stock_code == code
+
+
+def test_korean_object_question_switches_from_active_stock(bundled_chat_stock_index):
+    from src.agent.chat_object_decision import decide_chat_object
+    from src.agent.stock_scope import StockIdentity
+    from src.services.agent_chat_session_service import _stock_lookup
+
+    registry, lookup = _stock_lookup()
+    current = StockIdentity("000660.KS", "000660.KS", "stock", "SK하이닉스")
+    decision = decide_chat_object("삼성전자 어때?", current, registry, lookup)
+
+    assert decision.kind == "confirm"
+    assert decision.changes_target is True
+    assert decision.target.identity.stock_code == "005930.KS"
+
+
+@pytest.mark.parametrize("message", [
+    "어때?",
+    "수급 어때?",
+    "분석해줘",
+    "주가 전망",
+    "위험은?",
+])
+def test_korean_objectless_action_asks_for_target(bundled_chat_stock_index, message):
+    from src.agent.chat_object_decision import decide_chat_object
+    from src.services.agent_chat_session_service import _stock_lookup
+
+    registry, lookup = _stock_lookup()
+    decision = decide_chat_object(message, None, registry, lookup)
+
+    assert decision.kind == "clarify"
+
+
+@pytest.mark.parametrize("message", [
+    "005930 어때?",
+    "000660 분석해줘",
+    "035720 수급 어때?",
+])
+def test_korean_bare_code_with_kr_counterpart_requires_suffix(bundled_chat_stock_index, message):
+    from src.agent.chat_object_decision import decide_chat_object
+    from src.services.agent_chat_session_service import _stock_lookup
+
+    registry, lookup = _stock_lookup()
+    decision = decide_chat_object(message, None, registry, lookup)
+
+    assert decision.kind == "clarify"
+    assert decision.changes_target is True
+
+
+def test_chinese_bare_code_keeps_existing_a_share_semantics(bundled_chat_stock_index):
+    from src.agent.chat_object_decision import decide_chat_object
+    from src.services.agent_chat_session_service import _stock_lookup
+
+    registry, lookup = _stock_lookup()
+    decision = decide_chat_object("000001怎么样", None, registry, lookup)
+
+    assert decision.kind == "confirm"
+    assert decision.target.identity.stock_code == "000001"
+
+
+def test_service_clarification_is_localized_for_korean(db, chat_stock_index):
+    from src.services.agent_chat_session_service import AgentChatSessionService
+
+    service = AgentChatSessionService(db)
+    resolved = _resolve(service, "ko-clarify", "어때?", [], context={"report_language": "ko"})
+
+    assert resolved.active_stock_context is None
+    assert resolved.clarification
+    assert "주식" in resolved.clarification
+
+
 @pytest.fixture
 def actual_bundled_chat_api(actual_chat_api, bundled_chat_stock_index):
     # Keep the real HTTP/session/executor chain; only the model boundary is
@@ -2368,6 +2459,7 @@ def test_actual_chat_api_full_name_overlap(actual_bundled_chat_api, stream, mess
     client, requests, _config = actual_bundled_chat_api
     response = client.post("/api/v1/agent/chat" + ("/stream" if stream else ""), json={
         "session_id": "full-name-overlap", "message": message, "skills": [],
+        "context": {"report_language": "zh"},
     })
     assert response.status_code == 200
     events = [json.loads(line[6:]) for line in response.text.splitlines()
@@ -2385,6 +2477,25 @@ def test_actual_chat_api_full_name_overlap(actual_bundled_chat_api, stream, mess
         assert accepted["active_stock_context"]["stock_code"] == code
         assert final["content"] == "controlled API answer"
         assert len(requests) == 1
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_actual_chat_api_korean_question_binds_kr_stock(actual_bundled_chat_api, stream):
+    client, requests, _config = actual_bundled_chat_api
+    response = client.post("/api/v1/agent/chat" + ("/stream" if stream else ""), json={
+        "session_id": "kr-question", "message": "삼성전자 어때?", "skills": [],
+        "context": {"report_language": "ko"},
+    })
+    assert response.status_code == 200
+    events = [json.loads(line[6:]) for line in response.text.splitlines()
+              if line.startswith("data: ")] if stream else []
+    accepted = events[0] if stream else response.json()
+    final = events[-1] if stream else response.json()
+
+    assert accepted["active_stock_context"]["stock_code"] == "005930.KS"
+    assert final["content"] == "controlled API answer"
+    assert len(requests) == 1
+    assert requests[-1].stock_scope.allowed_stock_codes == {"005930.KS"}
 
 
 @pytest.mark.parametrize("stream", [False, True])

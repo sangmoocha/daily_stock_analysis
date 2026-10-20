@@ -53,6 +53,8 @@ class ResearchAgent:
         "get_daily_history",
         "get_sector_rankings",
         "get_market_indices",
+        # Korean investor flow is a dedicated tool, not A-share capital flow.
+        "get_investor_flow",
     ]
 
     def __init__(

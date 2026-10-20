@@ -14,10 +14,20 @@
 
 - 手动输入裸代码时会先检索本地/远程股票池；若 `005930`、`000660` 等裸码命中 `005930.KS`、`000660.KS` 等日韩条目，则按命中的市场提交分析；若股票池未命中，仍按既有 6 位数字代码规则默认落到 A 股语义，并保留为可追踪的跨市场歧义边界。
 - 日股/韩股 suffix 识别已集中到共享市场代码工具，数据源路由、Prompt 市场识别、交易日历和股票索引裸码解析复用同一组规则，减少后续市场扩展时的规则漂移。
-- 日股/韩股日线和基础实时/近实时行情只走 `YfinanceFetcher`，不尝试 AkShare、Tushare、Efinance、Pytdx、Baostock 等 A 股专属数据源；yfinance 报价会尽量带上 `market`、`currency`、`data_quality`、`missing_fields` 等质量元数据。
-- 基本面复用既有 offshore yfinance 轻量路径；A 股专属资金流、龙虎榜、板块等能力按 `not_supported` 降级，offshore 基本面上下文也会标记 provider、as_of、data_quality 和缺失块。
+- 日股日线和基础实时/近实时行情只走 `YfinanceFetcher`；韩股日线仍只走 `YfinanceFetcher`，韩股实时行情默认优先 `NaverKrFetcher`（Naver Finance），失败后回退 `YfinanceFetcher`。设置 `KR_REALTIME_SOURCE=yfinance` 可恢复 Yahoo-only 报价路径。报价会尽量带上 `market`、`currency`、`data_quality`、`missing_fields` 等质量元数据。
+- 基本面复用既有 offshore yfinance 轻量路径；韩股投资者资金流（수급）通过独立工具 `get_investor_flow` 读取 Naver Finance 的外资/机构/个人净买卖，不复用 A 股 `get_capital_flow` 的“主力资金”语义。A 股专属资金流、龙虎榜、板块等能力在韩股仍按 `not_supported` 降级，offshore 基本面上下文也会标记 provider、as_of、data_quality 和缺失块。
 - 报告 Prompt 已增加日股/韩股市场语义，避免套用 A 股涨跌停、北向资金、龙虎榜、融资融券等概念。
 - 交易日历注册 `jp: XTKS / Asia/Tokyo` 与 `kr: XKRX / Asia/Seoul`。日股常规阶段可识别盘前、盘中、午休、15:25-15:30 收盘集合竞价、盘后与非交易日；韩股常规阶段可识别盘前、盘中、15:20-15:30 收盘集合竞价、盘后与非交易日。若本地 `exchange-calendars` 版本缺少对应日历，既有 fail-open/fail-closed 语义保持不变。
+
+### 韩国实时行情与投资者资金流（Naver-first）
+
+- `NaverKrFetcher` 仅接受显式 `.KS` / `.KQ` 后缀。裸 6 位代码在纯中文消息中仍按 A 股语义处理，避免与 A 股代码冲突；聊天消息含韩文且该裸码同时存在 `.KS`/`.KQ` 条目时，会要求补充后缀，避免误判为 A 股。韩文公司名（如 `삼성전자`）与 `삼성전자 어때?` 这类对象问句可直接绑定韩股。
+- 实时行情读取 Naver Finance 移动端 `stock/{code}/basic` 与 `stock/{code}/integration`，输出现价、涨跌幅、开高低、成交量/成交额、市值、PER/PBR、52 周高低点；`stockExchangeType.delayTime=0` 仅代表 Naver 当前返回，不作为稳定性或交易所级实时性承诺。
+- 投资者资金流读取 `stock/{code}/trend`，返回最近最多 10 个交易日的外资、机构、个人净买卖（单位：股）与外资持股比例，并汇总 5 日/10 日累计值。该数据通过独立工具 `get_investor_flow` 暴露，不使用 A 股 `main_net_inflow` 字段。
+- 韩股日线 K 线仍由 `YfinanceFetcher` 提供；`NaverKrFetcher` 不参与 `daily_data` capability，日线路由不会因新增 fetcher 改变。
+- 可选环境变量（默认值即可运行）：`KR_REALTIME_SOURCE=naver|yfinance`、`NAVER_KR_TIMEOUT_S=10`、`NAVER_KR_QUOTE_CACHE_TTL_S=5`、`NAVER_KR_FLOW_CACHE_TTL_S=60`。
+- 失败边界：Naver 报价失败自动回退 Yahoo；资金流失败返回 `failed` 块并附错误信息，不阻断主分析流程。
+- Naver 移动端接口为非官方接口，字段、限流和可用性可能变化；后续如需更强 SLA，可在 `NaverKrFetcher` 同一抽象后接入 KIS/KRX 等官方源。
 
 兼容性与回退说明（针对结构化检测命中项）：
 
@@ -36,12 +46,12 @@
 
 不承诺项：
 
-- 不承诺实时行情；Yahoo Finance 数据可能延迟或字段缺失。
+- 不承诺交易所级实时行情；韩股默认 Naver Finance 报价可能受非官方接口限流/字段变更影响，Yahoo Finance 数据也可能延迟或字段缺失。
 - 不承诺完整基本面、行业/板块、市场宽度或涨跌家数。JP/KR 大盘复盘 v1 仅提供主要指数、新闻线索与模板/LLM 复盘，不提供日韩市场宽度或板块排行。
 - 不承诺完整日韩全市场股票列表；Web 自动补全当前仅覆盖仓内种子索引中的常用标的（已扩充至各 30 只左右的头部标的），未命中时仍可手动输入 suffix 代码。
 - 不补齐 Portfolio 的 JPY/KRW 汇率、成本、市值完整口径；相关字段仅放开市场类型以避免前后端校验拒绝。
 
-回滚方式：移除 `jp/kr` 市场识别、交易日历注册、YFinance 路由扩展、Web/API 类型放行、`scripts/stock_index_seeds/` 日韩种子索引，并删除本文档中的能力声明。
+回滚方式：移除 `jp/kr` 市场识别、交易日历注册、YFinance 路由扩展、`NaverKrFetcher`/`get_investor_flow` 及韩股实时路由、Web/API 类型放行、`scripts/stock_index_seeds/` 日韩种子索引，并删除本文档中的能力声明。
 
 ## 日本/韩国大盘复盘 v1（Issue #1815 Phase 2）
 

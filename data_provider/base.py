@@ -15,6 +15,7 @@
 """
 
 import logging
+import os
 import random
 import time
 from threading import BoundedSemaphore, RLock, Thread
@@ -639,6 +640,8 @@ class DataFetcherManager:
         "TickFlowFetcher": {"cn"},
         # 妙想为垂直补充数据源（资金流/筹码分布），不提供日线行情
         "MiaoxiangFetcher": set(),
+        # Naver 为韩股实时行情/投资者资金流补充源，不提供日线行情
+        "NaverKrFetcher": set(),
         "PytdxFetcher": {"cn"},
         "BaostockFetcher": {"cn"},
         "YfinanceFetcher": {"cn", "hk", "us", "jp", "kr", "tw"},
@@ -1804,7 +1807,8 @@ class DataFetcherManager:
           2. PytdxFetcher (Priority 2) - 通达信
           3. BaostockFetcher (Priority 3)
           4. YfinanceFetcher (Priority 4)
-          5. TencentFetcher (Priority 5) - A 股最终兜底
+          5. NaverKrFetcher (Priority 4) - 韩股实时行情/投资者资金流（不参与日线）
+          6. TencentFetcher (Priority 5) - A 股最终兜底
         """
         from src.config import get_config
         from .efinance_fetcher import EfinanceFetcher
@@ -1815,6 +1819,7 @@ class DataFetcherManager:
         from .pytdx_fetcher import PytdxFetcher
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
+        from .naver_kr_fetcher import NaverKrFetcher
         from .longbridge_fetcher import LongbridgeFetcher
         from .futu_fetcher import FutuFetcher
         config = get_config()
@@ -1825,6 +1830,7 @@ class DataFetcherManager:
         pytdx = PytdxFetcher()      # 通达信数据源（可配 PYTDX_HOST/PYTDX_PORT）
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
+        naver_kr = NaverKrFetcher()  # 韩股实时行情 / 投资者资金流（不参与日线）
         optional_fetchers: List[BaseFetcher] = []
 
         tushare_token = (getattr(config, "tushare_token", None) or "").strip()
@@ -1897,6 +1903,7 @@ class DataFetcherManager:
                 baostock,
                 yfinance,
                 tencent,
+                naver_kr,
                 *optional_fetchers,
             ]
 
@@ -2385,6 +2392,7 @@ class DataFetcherManager:
         if fetcher_name == "AkshareFetcher" and kw.get("source") == "hk":
             return "akshare_hk"
         mapping = {
+            "NaverKrFetcher": "naver",
             "LongbridgeFetcher": "longbridge",
             "FutuFetcher": "futu",
             "YfinanceFetcher": "yfinance",
@@ -2492,6 +2500,45 @@ class DataFetcherManager:
 
         if is_jp or is_kr or is_tw:
             market_label = "日股" if is_jp else "韩股" if is_kr else "台股"
+            if is_kr:
+                # 韩股优先 Naver（实时行情 + 后续投资者资金流），Yahoo 兜底。
+                # KR_REALTIME_SOURCE=yfinance 可显式回到旧的 Yahoo-only 路径。
+                kr_source = (os.getenv("KR_REALTIME_SOURCE") or "naver").strip().lower()
+                naver_fetcher = None
+                if kr_source != "yfinance":
+                    naver_fetcher = self._get_fetcher_by_name(
+                        "NaverKrFetcher", capability="realtime_quote"
+                    )
+                    if naver_fetcher is not None:
+                        quote = self._try_quote_from_fetcher(
+                            naver_fetcher, stock_code, **target_kwargs
+                        )
+                        if quote is not None:
+                            logger.info(
+                                f"[实时行情] {market_label} {stock_code} 成功获取 (来源: NaverKrFetcher)"
+                            )
+                            return self._enrich_realtime_quote(
+                                quote,
+                                realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
+                            )
+                # Naver 未命中或显式 yfinance 时回退 Yahoo；fallback_from
+                # 让质量元数据能标记这是一次 Naver -> Yahoo 的降级。
+                quote = self._try_fetcher_quote(
+                    stock_code, "YfinanceFetcher", **target_kwargs
+                )
+                if quote is not None:
+                    logger.info(
+                        f"[实时行情] {market_label} {stock_code} 成功获取 (来源: YfinanceFetcher)"
+                    )
+                    return self._enrich_realtime_quote(
+                        quote,
+                        fallback_from="naver" if naver_fetcher is not None else None,
+                        realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
+                    )
+                if log_final_failure:
+                    logger.info(f"[实时行情] {market_label} {stock_code} 无可用数据源")
+                return None
+
             quote = self._try_fetcher_quote(stock_code, "YfinanceFetcher", **target_kwargs)
             if quote is not None:
                 logger.info(f"[实时行情] {market_label} {stock_code} 成功获取 (来源: YfinanceFetcher)")
@@ -2872,6 +2919,16 @@ class DataFetcherManager:
                 error_message="fetcher unavailable",
             )
             return None
+        return self._try_quote_from_fetcher(
+            fetcher,
+            stock_code,
+            analysis_target=analysis_target,
+            **kw,
+        )
+
+    def _try_quote_from_fetcher(self, fetcher: BaseFetcher, stock_code: str,
+                                *, analysis_target: Optional[AnalysisTarget] = None, **kw):
+        """Try one already-resolved fetcher and record the provider run."""
         attempt_start = time.time()
         try:
             record_provider_run_started(
@@ -2913,7 +2970,7 @@ class DataFetcherManager:
                 error_type=error_type,
                 error_message=error_reason,
             )
-            logger.debug(f"[实时行情] {stock_code} {fetcher_name} 获取失败: {e}")
+            logger.debug(f"[实时行情] {stock_code} {fetcher.name} 获取失败: {e}")
         return None
 
     def _supplement_quote(self, stock_code: str, primary_quote, fetcher_name: str, **kw):
@@ -4741,6 +4798,68 @@ class DataFetcherManager:
                 cost_ms,
             ),
             list(payload.get("errors", [])) + ([err] if err else []),
+        )
+
+    def get_investor_flow_context(self, stock_code: str, days: int = 10) -> Dict[str, Any]:
+        """韩股投资者资金流块（外资/机构/个人净买卖）。
+
+        This is deliberately separate from :meth:`get_capital_flow_context`,
+        whose ``stock_flow`` payload means A-share main-force flow.  Korean
+        "수급" is foreign/institution/individual net buying and must not be
+        relabeled as A-share main-force money.
+        """
+        stock_code = normalize_stock_code(stock_code)
+        if _market_tag(stock_code) != "kr":
+            return self._build_fundamental_block(
+                "not_supported",
+                {},
+                [{"provider": "naver_kr", "result": "not_supported", "duration_ms": 0}],
+                ["investor flow is only supported for Korean stocks"],
+            )
+
+        # Keep Korean investor flow on its own provider/context method.  The
+        # A-share path exposes ``main_net_inflow``; relabeling foreign /
+        # institution / individual net buying as "main-force" would be wrong.
+        fetcher = self._get_fetcher_by_name("NaverKrFetcher", capability="capital_flow")
+        if fetcher is None or not hasattr(fetcher, "get_investor_flow"):
+            return self._build_fundamental_block(
+                "failed",
+                {},
+                [{"provider": "naver_kr", "result": "unavailable", "duration_ms": 0}],
+                ["NaverKrFetcher is unavailable"],
+            )
+
+        start_ts = time.time()
+        try:
+            payload = self._call_fetcher_method(fetcher, "get_investor_flow", stock_code, days=days)
+        except Exception as exc:  # noqa: BLE001 - fail-open to a failed block
+            logger.warning("[投资者资金流] %s 获取失败: %s", stock_code, exc)
+            return self._build_fundamental_block(
+                "failed",
+                {},
+                [{"provider": "naver_kr", "result": "failed", "duration_ms": int((time.time() - start_ts) * 1000)}],
+                [str(exc)],
+            )
+
+        if not isinstance(payload, dict) or not payload.get("investor_flows"):
+            return self._build_fundamental_block(
+                "failed",
+                {},
+                [{"provider": "naver_kr", "result": "empty", "duration_ms": int((time.time() - start_ts) * 1000)}],
+                ["empty investor flow payload"],
+            )
+
+        cost_ms = int((time.time() - start_ts) * 1000)
+        return self._build_fundamental_block(
+            "ok",
+            payload,
+            self._normalize_source_chain(
+                [{"provider": "naver_kr", "result": "ok", "duration_ms": cost_ms}],
+                "capital_flow",
+                "ok",
+                cost_ms,
+            ),
+            [],
         )
 
     def get_dragon_tiger_context(self, stock_code: str, budget_seconds: Optional[float] = None) -> Dict[str, Any]:

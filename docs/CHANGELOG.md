@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
+- [新功能] 韩股问股/分析新增 Naver Finance 实时行情与投资者资金流：实时报价默认 Naver、失败回退 Yahoo；新增 `get_investor_flow` 工具，输出外资/机构/个人净买卖（股数）、外资持股比例及 5/10 日累计；支持 `삼성전자 어때?` 这类韩语对象问句与 `.KS/.KQ` 代码，韩文消息中的裸 6 位韩股代码会要求补充后缀；`KR_REALTIME_SOURCE=yfinance` 可恢复 Yahoo-only 报价路径。
+- [文档] 补充韩股 Naver 实时行情与投资者资金流的接口边界、可选环境变量、失败回退和回滚方式到 `docs/market-support.md`。
 
 ## [3.33.0] - 2026-10-15
 

@@ -304,6 +304,8 @@ def _handle_get_realtime_quote(stock_code: str) -> dict:
         "pb_ratio": quote.pb_ratio,
         "total_mv": quote.total_mv,
         "circ_mv": quote.circ_mv,
+        "high_52w": getattr(quote, "high_52w", None),
+        "low_52w": getattr(quote, "low_52w", None),
         "change_60d": quote.change_60d,
         "source": quote.source.value if hasattr(quote.source, 'value') else str(quote.source),
     }
@@ -312,12 +314,15 @@ def _handle_get_realtime_quote(stock_code: str) -> dict:
 get_realtime_quote_tool = ToolDefinition(
     name="get_realtime_quote",
     description="Get real-time stock quote including price, change%, volume ratio, "
-                "turnover rate, PE, PB, market cap. Returns live market data.",
+                "turnover rate, PE, PB, market cap. Returns live market data. "
+                "Supports A-share (e.g. '600519'), US ('AAPL'), HK ('hk00700'), "
+                "and Korean stocks with a .KS/.KQ suffix (e.g. '005930.KS', '035720.KQ').",
     parameters=[
         ToolParameter(
             name="stock_code",
             type="string",
-            description="Stock code, e.g., '600519' (A-share), 'AAPL' (US), 'hk00700' (HK)",
+            description="Stock code, e.g., '600519' (A-share), 'AAPL' (US), "
+                        "'hk00700' (HK), '005930.KS' (KOSPI), '035720.KQ' (KOSDAQ)",
         ),
     ],
     handler=_handle_get_realtime_quote,
@@ -387,12 +392,14 @@ def _handle_get_daily_history(stock_code: str, days: int = 60) -> dict:
 get_daily_history_tool = ToolDefinition(
     name="get_daily_history",
     description="Get daily OHLCV (open, high, low, close, volume) historical data "
-                "with MA5/MA10/MA20 indicators. Returns the last N trading days.",
+                "with MA5/MA10/MA20 indicators. Returns the last N trading days. "
+                "Supports A-share, US, HK, JP (.T), and Korean (.KS/.KQ) stocks.",
     parameters=[
         ToolParameter(
             name="stock_code",
             type="string",
-            description="Stock code, e.g., '600519' (A-share), 'AAPL' (US)",
+            description="Stock code, e.g., '600519' (A-share), 'AAPL' (US), "
+                        "'005930.KS' (KOSPI), '7203.T' (Tokyo)",
         ),
         ToolParameter(
             name="days",
@@ -543,12 +550,15 @@ get_stock_info_tool = ToolDefinition(
     name="get_stock_info",
     description="Get stock fundamental information: valuation, growth, earnings, institution flow, "
                 "stock sector membership (belong_boards; boards is compatibility alias) and "
-                "sector rankings. Returns a compact fundamental_context to reduce token usage.",
+                "sector rankings. Returns a compact fundamental_context to reduce token usage. "
+                "Korean stocks use a .KS/.KQ suffix (e.g. '005930.KS'); Korean valuation "
+                "coverage depends on the available provider.",
     parameters=[
         ToolParameter(
             name="stock_code",
             type="string",
-            description="Stock code: A-share '600519', US 'AAPL', HK '00700'",
+            description="Stock code: A-share '600519', US 'AAPL', HK '00700', "
+                        "Korean '005930.KS' / '035720.KQ'",
         ),
     ],
     handler=_handle_get_stock_info,
@@ -729,7 +739,8 @@ get_capital_flow_tool = ToolDefinition(
         "Get main-force (主力) capital flow data for an A-share stock. "
         "Returns today's net inflow, 5-day and 10-day cumulative inflows, "
         "and top sector-level capital flow rankings. "
-        "Only supported for A-share individual stocks (not ETFs, indices, HK, or US stocks)."
+        "Only supported for A-share individual stocks (not ETFs, indices, HK, or US stocks). "
+        "For Korean stocks (.KS/.KQ), use get_investor_flow instead."
     ),
     parameters=[
         ToolParameter(
@@ -745,3 +756,100 @@ get_capital_flow_tool = ToolDefinition(
 
 
 ALL_DATA_TOOLS.append(get_capital_flow_tool)
+
+
+# ============================================================
+# get_investor_flow (Korean stocks)
+# ============================================================
+# A-share "main-force" flow and Korean foreign/institution/individual flow
+# have different semantics, so they stay separate tools instead of sharing
+# one payload with provider-specific keys.
+
+def _handle_get_investor_flow(stock_code: str, days: int = 10) -> dict:
+    """Get foreign/institution/individual net-buy flow for a Korean stock."""
+    # Naver exposes at most ten recent rows; clamp here so the tool contract
+    # stays stable even if the model asks for a larger window.
+    try:
+        effective_days = int(days)
+    except (TypeError, ValueError):
+        effective_days = 10
+    effective_days = max(1, min(effective_days, 10))
+
+    manager = _get_fetcher_manager()
+    # The manager normally converts provider errors into status blocks, but
+    # keep a defensive catch so a tool call can never crash the chat turn.
+    try:
+        ctx = manager.get_investor_flow_context(stock_code, days=effective_days)
+    except Exception as exc:
+        logger.warning("get_investor_flow failed for %s: %s", stock_code, exc)
+        return {
+            "stock_code": stock_code,
+            "status": "error",
+            "error": f"investor flow fetch failed: {exc}",
+        }
+
+    status = ctx.get("status", "not_supported")
+    if status == "not_supported":
+        return {
+            "stock_code": stock_code,
+            "status": "not_supported",
+            "note": (
+                "Investor flow data is only available for Korean stocks with a "
+                ".KS/.KQ suffix (e.g. '005930.KS'). For A-share main-force flow "
+                "use get_capital_flow."
+            ),
+        }
+    if status != "ok":
+        return {
+            "stock_code": stock_code,
+            "status": status,
+            "errors": ctx.get("errors") or [],
+        }
+
+    data = ctx.get("data") or {}
+    flows = data.get("investor_flows") or []
+    return {
+        "stock_code": stock_code,
+        "status": status,
+        "code": data.get("code"),
+        "as_of": data.get("as_of"),
+        "source": data.get("source"),
+        "currency": data.get("currency"),
+        "unit": data.get("unit"),
+        "investor_flows": flows[:effective_days],
+        "summary": data.get("summary") or {},
+        "errors": ctx.get("errors") or [],
+    }
+
+
+get_investor_flow_tool = ToolDefinition(
+    name="get_investor_flow",
+    description=(
+        "Get Korean stock investor trading flow (수급) for KOSPI/KOSDAQ stocks. "
+        "Returns daily foreign, institution, and individual net buy/sell quantities "
+        "(shares), foreign ownership ratio, and 5-day/10-day cumulative totals. "
+        "Only supported for Korean stocks with a .KS/.KQ suffix (e.g. '005930.KS'). "
+        "For A-share main-force capital flow use get_capital_flow."
+    ),
+    parameters=[
+        ToolParameter(
+            name="stock_code",
+            type="string",
+            description="Korean stock code with suffix, e.g. '005930.KS' (Samsung Electronics), "
+                        "'035720.KQ' (Kakao)",
+        ),
+        ToolParameter(
+            name="days",
+            type="integer",
+            description="Number of recent trading days to return (1-10, default: 10)",
+            required=False,
+            default=10,
+        ),
+    ],
+    handler=_handle_get_investor_flow,
+    category="data",
+    policy=_MARKET_DATA_STOCK_POLICY,
+)
+
+
+ALL_DATA_TOOLS.append(get_investor_flow_tool)

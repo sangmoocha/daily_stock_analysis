@@ -222,8 +222,15 @@ class AgentChatSessionService:
             confirm = False
             from src.report_language import normalize_report_language
 
-            if normalize_report_language((context or {}).get("report_language") or getattr(config, "report_language", "zh")) == "en":
+            # Clarification copy follows the resolved report language; Korean
+            # is a first-class option alongside Chinese and English.
+            language = normalize_report_language(
+                (context or {}).get("report_language") or getattr(config, "report_language", "zh")
+            )
+            if language == "en":
                 clarification = "The discussion target is not confirmed. Please provide the complete stock or index code."
+            elif language == "ko":
+                clarification = "이번 대화의 주식을 확인할 수 없습니다. 전체 종목 코드를 입력하거나 전환할 주식을 명확히 알려 주세요."
         allowed = []
         if active is not None:
             allowed.append(_identity(active))

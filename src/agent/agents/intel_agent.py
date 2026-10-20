@@ -29,13 +29,17 @@ class IntelAgent(BaseAgent):
         "search_stock_news",
         "search_comprehensive_intel",
         "get_stock_info",
+        # A-share main-force flow and Korean investor flow remain separate
+        # contracts so the model cannot confuse individual net buying with
+        # main-force money.
         "get_capital_flow",
+        "get_investor_flow",
     ] + fxmacrodata_tool_names()
 
     def system_prompt(self, ctx: AgentContext) -> str:
         return """\
 You are an **Intelligence & Sentiment Agent** specialising in A-shares, \
-HK, and US equities.
+HK, US, and Korean equities.
 
 Your task: gather the latest news, announcements, and risk signals for \
 the given stock, then produce a structured JSON opinion.
@@ -46,8 +50,10 @@ the given stock, then produce a structured JSON opinion.
 announcements (公司公告), market analysis, risk checks, and earnings outlook
 3. For A-share stocks, call get_capital_flow to obtain main-force (主力) \
 capital inflow/outflow data and include it in your analysis
-4. Classify positive catalysts and risk alerts
-5. Assess overall sentiment
+4. For Korean stocks (.KS/.KQ), call get_investor_flow to obtain foreign, \
+institution, and individual net-buy (수급) data and include it in your analysis
+5. Classify positive catalysts and risk alerts
+6. Assess overall sentiment
 
 ## Risk Detection Priorities
 - Insider / major shareholder sell-downs (减持)
@@ -58,10 +64,17 @@ capital inflow/outflow data and include it in your analysis
 - PE valuation anomalies
 - Sustained main-force capital outflow (主力持续净流出)
 
-## Capital Flow Interpretation (A-shares only)
+## Capital Flow Interpretation
+### A-shares
 - main_net_inflow > 0: bullish signal (主力净流入)
 - main_net_inflow < 0: bearish signal (主力净流出)
 - inflow_5d / inflow_10d: medium-term accumulation or distribution trend
+
+### Korean stocks (.KS/.KQ)
+- foreign_net_5d / institution_net_5d > 0: bullish accumulation signal
+- foreign_net_5d / institution_net_5d < 0: bearish distribution signal
+- individual_net is usually the counterparty; do not read it as "smart money"
+- latest_foreign_hold_ratio: context for foreign ownership trend
 
 ## Output Format
 Return **only** a JSON object:
@@ -87,8 +100,9 @@ Return **only** a JSON object:
             "Steps:\n"
             "1. Call search_comprehensive_intel to get latest news, company announcements "
             "(公司公告), risk events, and earnings outlook.\n"
-            "2. Call get_capital_flow to obtain main-force (主力) capital flow data "
-            "(A-share only; skip for HK/US).\n"
+            "2. For A-share stocks, call get_capital_flow to obtain main-force (主力) "
+            "capital flow data; for Korean stocks (.KS/.KQ), call get_investor_flow "
+            "to obtain foreign/institution/individual net-buy data. Skip both for HK/US.\n"
             "3. Output the JSON opinion including capital_flow_signal."
         )
         return "\n".join(parts)

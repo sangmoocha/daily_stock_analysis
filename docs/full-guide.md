@@ -445,6 +445,10 @@ daily_stock_analysis/
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Legacy Access Token（不是 OAuth access token） | - | 可选 |
 | `LONGBRIDGE_*`（可选） | 见官方 [环境变量](https://open.longbridge.com/zh-CN/docs/getting-started#环境变量)；另有 `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` 与 `LONGBRIDGE_CONNECTION_COOLDOWN_SECONDS` | - | 可选 |
 | `ENABLE_REALTIME_QUOTE` | 启用实时行情（关闭后使用历史收盘价分析） | `true` | 可选 |
+| `KR_REALTIME_SOURCE` | 韩股实时行情来源：`naver`（默认，Naver Finance）或 `yfinance`（仅 Yahoo Finance）；Naver 失败自动回退 Yahoo。 | `naver` | 可选 |
+| `NAVER_KR_TIMEOUT_S` | Naver Finance 请求超时（秒） | `10` | 可选 |
+| `NAVER_KR_QUOTE_CACHE_TTL_S` | Naver 韩股实时行情缓存 TTL（秒） | `5` | 可选 |
+| `NAVER_KR_FLOW_CACHE_TTL_S` | Naver 韩股投资者资金流缓存 TTL（秒） | `60` | 可选 |
 | `ENABLE_REALTIME_TECHNICAL_INDICATORS` | 盘中实时技术面：启用时用实时价计算 MA5/MA10/MA20 与多头排列（Issue #234）；关闭则用昨日收盘 | `true` | 可选 |
 | `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布分析（该接口不稳定，云端部署建议关闭）。GitHub Actions 用户需在 Repository Variables 中设置 `ENABLE_CHIP_DISTRIBUTION=true` 方可启用；workflow 默认关闭。 | `true` | 可选 |
 | `ENABLE_EASTMONEY_PATCH` | 东财接口补丁：东财接口频繁失败（如 RemoteDisconnected、连接被关闭）时建议设为 `true`，注入 NID 令牌与随机 User-Agent 以降低被限流概率 | `false` | 可选 |

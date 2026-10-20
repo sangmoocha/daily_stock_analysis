@@ -116,6 +116,48 @@ _SWITCHES = {"换成", "改看", "切换到"}
 _CLAUSE = re.compile(r"[，。！？!?；;,\n]")
 _ASIDE = re.compile(r"[，。！？!?；;,\n]|顺带|顺便|另外|然后|并(?:且)?(?:比较|对比)")
 _OBJECT_QUESTION = re.compile(r"\s*(?:现在|目前|当前)?(?:还)?(?:(?:能|可以|适合|值得)(?:买|卖|持有|投资)|(?:有)?什么|怎么样|如何)")
+# Korean is object-first (``삼성전자 어때?``), so the subject-question path below
+# binds the leading name/code to the predicate that follows it. Keep this
+# separate from the Chinese verb-first patterns above.
+_KR_OBJECT_QUESTION = re.compile(
+    r"\s*(?:(?:지금|현재|요즘|최근|그럼|그러면|그리고|근데|그런데|이제)\s*)?"
+    r"(?:(?:주가|시세|수급|전망|차트|기술적\s*분석|재무|실적|밸류에이션|목표주가|배당|뉴스|호재|악재|위험|리스크)\s*)?"
+    r"(?:어때요|어때|어떤가요|어떻게\s*생각해|어떻게\s*보여|어때\s*보여|어떻게|어떨까요|어떨까|"
+    r"괜찮을까요|괜찮을까|괜찮아요|괜찮아|좋을까요|좋을까|좋아요|좋아|"
+    r"분석해주세요|분석해줘|분석해|분석\s*부탁드려|분석\s*부탁해|"
+    r"전망은|전망|수급은|수급|주가는|주가|시세는|시세|위험은|위험|리스크는|리스크|"
+    r"매수할까|매도할까|살까요|살까|팔까요|팔까|알려줘|보여줘)"
+    r"(?:\s*(?:은|는|이|가|좀|줘|요|까|나|지|죠))?[？?！!。\s]*"
+)
+# Korean predicates are object-first.  Allow only leading discourse markers
+# here so arbitrary text before a Korean subject is not treated as a question.
+_KR_SUBJECT_PREFIX = re.compile(r"\s*(?:(?:请问|그럼|그러면|그리고|근데|그런데|지금|현재|요즘|최근|이제)\s*)*")
+_HANGUL = re.compile(r"[\uac00-\ud7a3]")
+
+
+def _ambiguous_korean_bare_code(text: str, mentions, lookup: dict) -> bool:
+    """Detect a Hangul message using a bare 6-digit code that also exists as KR.
+
+    ``005930`` is a valid A-share-shaped code, so the shared parser keeps its
+    existing A-share semantics. When the same message is clearly Korean and the
+    catalogue contains ``005930.KS`` / ``005930.KQ``, asking for the suffix is
+    safer than silently analysing the A-share identity.
+    """
+    if not _HANGUL.search(text):
+        return False
+    codes = lookup.get("codes") or {}
+    for mention in mentions:
+        if mention.kind != "code":
+            continue
+        raw = mention.raw.strip()
+        if not re.fullmatch(r"\d{6}", raw):
+            continue
+        identity = mention.identity
+        if identity is None or identity.stock_code.endswith((".KS", ".KQ")):
+            continue
+        if f"{raw}.KS" in codes or f"{raw}.KQ" in codes:
+            return True
+    return False
 
 
 def _qualification(text: str, operation) -> tuple[str, str]:
@@ -167,6 +209,10 @@ def decide_chat_object(message: str, current: Optional[StockIdentity], registry:
     """One mutually exclusive decision; callers apply live/history fact eligibility."""
     text = unicodedata.normalize("NFKC", message)
     mentions = object_mentions(text, registry, lookup)
+    # A bare 6-digit code that also has a Korean suffix is ambiguous in a
+    # Hangul message: ask for the suffix instead of silently choosing A-share.
+    if _ambiguous_korean_bare_code(text, mentions, lookup):
+        return ObjectDecision("clarify", changes_target=True)
     affirmative, uncertain, denied = [], False, False
     for operation in _OPERATIONS.finditer(text):
         qualification, prefix = _qualification(text, operation)
@@ -239,9 +285,11 @@ def decide_chat_object(message: str, current: Optional[StockIdentity], registry:
     # unique incidental mention in the whole message.
     if not denied:
         for subject in mentions:
-            if not re.fullmatch(r"\s*(?:请问\s*)?", text[:subject.start]):
+            if not _KR_SUBJECT_PREFIX.fullmatch(text[:subject.start]):
                 continue
             question = _OBJECT_QUESTION.match(text, subject.end)
+            if question is None:
+                question = _KR_OBJECT_QUESTION.match(text, subject.end)
             if question is not None:
                 qualification, _prefix = _qualification(text, question)
                 if qualification != "affirmative" or subject.identity is None:
@@ -259,6 +307,10 @@ def decide_chat_object(message: str, current: Optional[StockIdentity], registry:
                             and item.identity is not None)
         if len(set(relevant)) > 1:
             return ObjectDecision("clarify")
+    # Objectless Korean questions such as "수급 어때?" still need a target;
+    # reuse the existing clarification flow instead of guessing a stock.
+    if current is None and _KR_OBJECT_QUESTION.fullmatch(text):
+        return ObjectDecision("clarify")
     if current is None and re.fullmatch(
         r"\s*(?:(?:分析|看看|研究|诊断)(?:一下子|一下|下)?\s*)?"
         r"(?:近期|最近|当前)?(?:风险|走势|估值|基本面|技术面|财务状况|盈利能力|它|还能买吗|怎么样)"
