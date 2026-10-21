@@ -38,6 +38,7 @@ from src.notification_noise import (
     release_notification_noise,
 )
 from src.report_language import (
+    SUPPORTED_REPORT_LANGUAGES,
     get_localized_stock_name,
     get_report_labels,
     get_signal_level,
@@ -177,6 +178,36 @@ def _append_strategy_synthesis_block(lines: List[str], strategy_synthesis: Any, 
                 f"{localize_strategy_conflict_description(conflict.get('conflict_type'), report_language)}{suffix}"
             )
     lines.append("")
+
+# Display names for realtime data sources shown in the market snapshot block.
+# Every entry must cover all supported report languages, otherwise a report
+# rendered in a language without a label fails to generate entirely.
+_SOURCE_DISPLAY_NAMES: Dict[str, Dict[str, str]] = {
+    "tencent": {"zh": "腾讯财经", "en": "Tencent Finance", "ko": "Tencent Finance"},
+    "akshare_em": {"zh": "东方财富", "en": "Eastmoney", "ko": "Eastmoney"},
+    "akshare_sina": {"zh": "新浪财经", "en": "Sina Finance", "ko": "Sina Finance"},
+    "akshare_qq": {"zh": "腾讯财经", "en": "Tencent Finance", "ko": "Tencent Finance"},
+    "efinance": {"zh": "东方财富(efinance)", "en": "Eastmoney (efinance)", "ko": "Eastmoney (efinance)"},
+    "tushare": {"zh": "Tushare Pro", "en": "Tushare Pro", "ko": "Tushare Pro"},
+    "naver": {"zh": "Naver Finance", "en": "Naver Finance", "ko": "네이버 파이낸스"},
+    "sina": {"zh": "新浪财经", "en": "Sina Finance", "ko": "Sina Finance"},
+    "stooq": {"zh": "Stooq", "en": "Stooq", "ko": "Stooq"},
+    "longbridge": {"zh": "长桥", "en": "Longbridge", "ko": "Longbridge"},
+    "fallback": {"zh": "降级兜底", "en": "Fallback", "ko": "폴백"},
+}
+
+_MISSING_SOURCE_DISPLAY_LANGUAGES = sorted({
+    language
+    for mapping in _SOURCE_DISPLAY_NAMES.values()
+    for language in SUPPORTED_REPORT_LANGUAGES
+    if language not in mapping
+})
+if _MISSING_SOURCE_DISPLAY_LANGUAGES:
+    raise RuntimeError(
+        "Realtime source display names must cover every SUPPORTED_REPORT_LANGUAGES value; "
+        f"missing: {', '.join(_MISSING_SOURCE_DISPLAY_LANGUAGES)}"
+    )
+
 
 if TYPE_CHECKING:
     from src.analyzer import AnalysisResult
@@ -2118,23 +2149,9 @@ class NotificationService(
 
         return "\n".join(lines)
 
-    # Display name mapping for realtime data sources
-    _SOURCE_DISPLAY_NAMES = {
-        "tencent": {"zh": "腾讯财经", "en": "Tencent Finance"},
-        "akshare_em": {"zh": "东方财富", "en": "Eastmoney"},
-        "akshare_sina": {"zh": "新浪财经", "en": "Sina Finance"},
-        "akshare_qq": {"zh": "腾讯财经", "en": "Tencent Finance"},
-        "efinance": {"zh": "东方财富(efinance)", "en": "Eastmoney (efinance)"},
-        "tushare": {"zh": "Tushare Pro", "en": "Tushare Pro"},
-        "sina": {"zh": "新浪财经", "en": "Sina Finance"},
-        "stooq": {"zh": "Stooq", "en": "Stooq"},
-        "longbridge": {"zh": "长桥", "en": "Longbridge"},
-        "fallback": {"zh": "降级兜底", "en": "Fallback"},
-    }
-
     def _get_source_display_name(self, source: Any, language: Optional[str]) -> str:
         raw_source = str(source or "N/A")
-        mapping = self._SOURCE_DISPLAY_NAMES.get(raw_source)
+        mapping = _SOURCE_DISPLAY_NAMES.get(raw_source)
         if not mapping:
             return raw_source
         return mapping[normalize_report_language(language)]

@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 快速了解项目能做什么 | [README](../README.md) | [完整配置与部署指南](full-guide.md) |
 | 第一次把项目跑起来 | [小白客户端安装与配置](beginner-client-setup.md) | [完整配置与部署指南](full-guide.md) |
-| 配置大模型渠道 | [LLM 配置指南](LLM_CONFIG_GUIDE.md) | [LLM 服务商配置指南](llm-providers.md)（含 xAI Grok 直连） |
+| 配置大模型渠道 | [LLM 配置指南](LLM_CONFIG_GUIDE.md) | [LLM 服务商配置指南](llm-providers.md)（含 xAI Grok 直连）、[韩语指南](llm-setup-ko.md) |
 | 配置推送通知 | [通知能力基线](notifications.md) | [完整配置与部署指南](full-guide.md) |
 | 部署到服务器或云平台 | [部署指南](DEPLOY.md) | [云端 WebUI 部署](deploy-webui-cloud.md)、[Zeabur 部署](docker/zeabur-deployment.md) |
 | 使用 Bot / IM 接入 | [Bot 命令与接入](bot-command.md) | [Bot 平台配置](bot/)、[Grok Bot 集成](grok-bot-integration.md) |
@@ -82,3 +82,4 @@
 | [英文文档索引](INDEX_EN.md) | English documentation index |
 | [英文 README](README_EN.md) | English project overview and quick start |
 | [繁中 README](README_CHT.md) | 繁體中文項目概覽與快速開始 |
+| [韩语 LLM 配置指南](llm-setup-ko.md) | 韩语 LLM 配置说明：provider 清单、配置方法、NVIDIA Nemotron 实测接入 |

@@ -132,12 +132,19 @@ export const SettingsPanelErrorBoundary = (props: SettingsPanelErrorBoundaryProp
         defaultDiagnosticHint: 'Provide the release version, runtime environment, and trigger path to help diagnose the issue.',
         errorSummaryPrefix: 'Error summary: ',
       }
-    : {
-        loadFailedSuffix: '加载失败',
-        runtimeErrorMessage: '该设置区域发生前端运行时异常，页面其他设置仍可继续使用。',
-        defaultDiagnosticHint: '请补充 release 版本、运行环境和触发入口，便于定位问题。',
-        errorSummaryPrefix: '错误摘要：',
-      };
+    : language === 'ko'
+      ? {
+          loadFailedSuffix: ' 로드 실패',
+          runtimeErrorMessage: '이 설정 영역에서 프런트엔드 런타임 오류가 발생했습니다. 다른 설정은 계속 사용할 수 있습니다.',
+          defaultDiagnosticHint: '문제를 파악할 수 있도록 릴리스 버전, 실행 환경, 진입 경로를 알려주세요.',
+          errorSummaryPrefix: '오류 요약: ',
+        }
+      : {
+          loadFailedSuffix: '加载失败',
+          runtimeErrorMessage: '该设置区域发生前端运行时异常，页面其他设置仍可继续使用。',
+          defaultDiagnosticHint: '请补充 release 版本、运行环境和触发入口，便于定位问题。',
+          errorSummaryPrefix: '错误摘要：',
+        };
 
   return <SettingsPanelErrorBoundaryImpl {...props} labels={labels} />;
 };

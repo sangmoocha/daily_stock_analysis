@@ -338,6 +338,40 @@ class TestStockIndexLoader(unittest.TestCase):
                 self.assertIsNone(stock_index_loader.resolve_index_stock_code("2330.TW"))
                 self.assertIsNone(stock_index_loader.resolve_index_stock_code("6505.TWO"))
 
+    def test_cn_index_bare_alias_blocks_kr_bare_resolution(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundled_path = Path(temp_dir) / "stocks.index.json"
+            bundled_path.write_text(
+                json.dumps(
+                    [
+                        ["sh000300", "sh000300", "沪深300", "hushen300", "hs300", [], "CN", "index", True, 100],
+                        ["000300.KS", "000300.KS", "DH오토넥스", "dhauthonex", "dha", [], "KR", "stock", True, 100],
+                        ["005930.KS", "005930.KS", "삼성전자", "samsung", "ss", [], "KR", "stock", True, 100],
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                stock_index_loader,
+                "get_remote_stock_index_cache_path",
+                return_value=Path(temp_dir) / "missing.json",
+            ), patch.object(
+                stock_index_loader,
+                "get_stock_index_candidate_paths",
+                return_value=(bundled_path,),
+            ):
+                self.assertIsNone(stock_index_loader.resolve_index_stock_code("000300"))
+                self.assertEqual(
+                    stock_index_loader.resolve_index_stock_code("000300.KS"),
+                    "000300.KS",
+                )
+                self.assertEqual(
+                    stock_index_loader.resolve_index_stock_code("005930"),
+                    "005930.KS",
+                )
+
     # ------------------------------------------------------------------
     # Active index row loader
     # ------------------------------------------------------------------

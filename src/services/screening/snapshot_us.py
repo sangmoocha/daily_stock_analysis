@@ -6,8 +6,9 @@
 US snapshot provider for the screening L1 pipeline. Fetches a configurable
 equity universe and returns the standard snapshot DataFrame schema.
 
-HK is not supported yet: there is no HK universe source or ticker
-configuration path, so ``market="hk"`` is rejected at the pipeline level
+The Korean market uses its own DART/KRX-backed provider in
+``snapshot_kr.py``. HK is not supported yet: there is no HK universe source or
+ticker configuration path, so ``market="hk"`` is rejected at the pipeline level
 rather than silently screening the US pool.
 """
 

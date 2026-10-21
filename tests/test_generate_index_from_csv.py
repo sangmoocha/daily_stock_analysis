@@ -33,6 +33,7 @@ from generate_index_from_csv import (
     build_index_entries_from_seed,
     validate_index_registry,
     run_index_only,
+    run_seed_market,
     _normalize_index_key,
 )
 
@@ -1004,3 +1005,35 @@ class TestIndexRegistrySeed:
         index_rows = [item for item in compressed if len(item) > 7 and item[7] == "index"]
         canonicals = [x[0] for x in index_rows]
         assert canonicals == sorted(canonicals)
+
+    def test_seed_market_replaces_only_that_market(self, tmp_path, monkeypatch):
+        import generate_index_from_csv as gen
+
+        stocks = [
+            {
+                "ts_code": "005930.KS",
+                "symbol": "005930.KS",
+                "name": "삼성전자",
+                "market": "KR",
+                "aliases": ["00126380"],
+            }
+        ]
+        monkeypatch.setattr(
+            gen,
+            "load_tushare_data",
+            lambda data_dir, only_market=None: stocks if only_market == "KR" else [],
+        )
+        existing = [
+            ["AAPL.US", "AAPL", "Apple", "apple", "aapl", [], "US", "stock", True, 100],
+            ["000660.KS", "000660.KS", "SK하이닉스", "", "", [], "KR", "stock", True, 100],
+            ["sh000300", "sh000300", "沪深300", "", "", [], "CN", "index", True, 100],
+        ]
+        output = tmp_path / "stocks.index.json"
+        output.write_text(json.dumps(existing), encoding="utf-8")
+
+        merged = run_seed_market(output, "KR")
+
+        assert merged[0][0] == "AAPL.US"
+        assert merged[1][0] == "sh000300"
+        assert [row[0] for row in merged[2:]] == ["005930.KS"]
+        assert json.loads(output.read_text(encoding="utf-8")) == merged

@@ -1,0 +1,75 @@
+# Derived from AlphaSift revision 9f522747caafd3c0b1ddb7e14d5cf44c8580b6cf.
+# Licensed under Apache-2.0 and modified for daily_stock_analysis.
+# 韩国动量突破策略
+name: kr_momentum_breakout
+display_name: 韩国动量突破
+description: 在 KOSPI/KOSDAQ 中寻找成交活跃、趋势确认且尚未极端追涨的动量候选
+version: "1.0"
+category: momentum
+tags: [korea, momentum, breakout, trend]
+analysis_skills: [bull_trend, volume_breakout]
+style:
+  risk_profile: balanced
+  holding_period: swing
+  execution_style: trend_quality
+  market_regime: [risk_on, trend, rotation]
+  capital_profile: high_liquidity
+  ui_badge: 韩股动量
+
+screening:
+  enabled: true
+  market_scope: [kr]
+  hard_filters:
+    exclude_st: false
+    amount_min: 3000000000
+    market_cap_min: 30000000000
+    price_min: 500
+    price_max: 1000000
+    change_pct_min: 1.0
+    change_pct_max: 12.0
+    turnover_rate_min: 0.3
+    volume_ratio_20d_min: 1.3
+    require_price_above_ma20: true
+    breakout_20d_pct_min: 0.0
+    range_20d_pct_max: 40.0
+    macd_status_whitelist: [bullish, neutral]
+  tech_weight: 0.50
+  factor_weights:
+    momentum: 0.35
+    activity: 0.24
+    liquidity: 0.18
+    stability: 0.13
+    theme_heat: 0.06
+    reversal: 0.04
+  scoring_profile:
+    momentum_chase_start_pct: 6.0
+    momentum_chase_penalty_slope: 16.0
+    activity_ideal_volume_ratio: 2.2
+    activity_ideal_turnover_rate: 2.5
+    stability_hot_change_pct: 8.0
+    stability_high_turnover_rate: 12.0
+    stability_high_volume_ratio: 5.0
+  risk_profile:
+    chase_change_pct: 10.0
+    abnormal_volume_ratio: 6.0
+    high_turnover_rate: 16.0
+    low_llm_confidence: 0.50
+  portfolio_profile:
+    max_same_bucket: 1
+    concentration_penalty: 4.5
+    buckets:
+      半导体: [반도체, 半导体, 반도체장비]
+      汽车: [자동차, 汽车, 자동차부품]
+      生物医药: [바이오, 生物, 제약, 医药]
+      新能源: [배터리, 二次电池, 新能源, 태양광]
+      消费: [유통, 消费, 식품, 食品]
+  scorecard_profile:
+    capital_confirmed_bonus: 2.4
+    volume_spike_ratio: 5.0
+    hot_money_penalty: 2.5
+  ranking_hints: |
+    优先关注：
+    1. 已经确认趋势但还没有进入极端追涨阶段的韩国股票
+    2. 成交额和 20 日量比能支撑突破有效性
+    3. 避免只靠单日脉冲、缺少后续流动性的候选
+  max_output: 5

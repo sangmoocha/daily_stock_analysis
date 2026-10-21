@@ -188,6 +188,15 @@ def _build_stock_code_candidates(raw_items: list) -> dict[str, set[str]]:
             base = canonical_code.rsplit(".", 1)[0]
             if base.isdigit() and len(base) == 6:
                 _add_code_lookup(candidates, base, canonical_code)
+            else:
+                # CN indices are canonicals such as ``sh000300`` / ``csi930955``.
+                # Register their bare six-digit form in the ambiguity map too;
+                # otherwise a Korean stock with the same six digits (for
+                # example ``000300.KS``) would be the only candidate and
+                # hijack a bare A-share/index code.
+                cn_index = re.fullmatch(r"(?:sh|sz|csi)(\d{6})", canonical_code.casefold())
+                if cn_index:
+                    _add_code_lookup(candidates, cn_index.group(1), canonical_code)
 
     return candidates
 

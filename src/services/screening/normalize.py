@@ -13,6 +13,9 @@ _NULL_TEXT_VALUES = {"", "nan", "none", "<na>", "na", "null"}
 # US-style ticker: ASCII letters/digits with optional dot/dash separators,
 # at least one letter (pure digits are A-share codes).
 _TICKER_RE = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9.\-]{0,19}$")
+# Yahoo-style offshore suffixes that carry the exchange identity. Stripping
+# these would turn a Korean/Japanese/Taiwan code into an A-share code.
+_OFFSHORE_SUFFIX_RE = re.compile(r"^(\d{4,6})\.(KS|KQ|T|TW|TWO)$", re.IGNORECASE)
 
 
 def safe_text(value: object, *, max_len: int | None = None) -> str:
@@ -32,7 +35,9 @@ def safe_text(value: object, *, max_len: int | None = None) -> str:
 def normalize_code(value: object, *, width: int = 6, allow_ticker: bool = False) -> str:
     """Normalize A-share style stock codes from numeric, prefixed, or suffixed text.
 
-    A-share recognition always takes precedence and is unchanged. With
+    A-share recognition always takes precedence and is unchanged. Yahoo-style
+    offshore suffixes (``005930.KS``, ``247540.KQ``, ``7203.T``, ``2330.TW``)
+    are preserved because the suffix carries the exchange identity. With
     ``allow_ticker=True``, text with no embedded A-share code that looks like
     a US-style ticker (AAPL, BRK-B) passes through uppercased instead of
     normalizing to "". Only opt in for structured code fields (snapshot rows,
@@ -44,6 +49,9 @@ def normalize_code(value: object, *, width: int = 6, allow_ticker: bool = False)
         return ""
     if text.endswith(".0") and text[:-2].isdigit():
         text = text[:-2]
+    offshore = _OFFSHORE_SUFFIX_RE.fullmatch(text)
+    if offshore:
+        return f"{offshore.group(1)}.{offshore.group(2).upper()}"
     if text.isdigit():
         return text.zfill(width)[-width:]
     match = re.search(r"(?<!\d)(\d{6})(?!\d)", text)

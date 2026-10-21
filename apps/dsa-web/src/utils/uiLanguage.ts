@@ -2,11 +2,39 @@ import type { UiLanguage } from '../i18n/uiText';
 
 export const UI_LANGUAGE_STORAGE_KEY = 'dsa.uiLanguage';
 
+export const UI_LANGUAGES: readonly UiLanguage[] = ['zh', 'en', 'ko'];
+
+export const DEFAULT_UI_LANGUAGE: UiLanguage = 'ko';
+
 export function normalizeUiLanguage(value?: string | null): UiLanguage | null {
-  if (value === 'zh' || value === 'en') {
+  if (value === 'zh' || value === 'en' || value === 'ko') {
     return value;
   }
   return null;
+}
+
+export function getUiLocale(language: UiLanguage): string {
+  if (language === 'en') {
+    return 'en-US';
+  }
+  if (language === 'ko') {
+    return 'ko-KR';
+  }
+  return 'zh-CN';
+}
+
+export function getUiDocumentLanguage(language: UiLanguage): string {
+  return getUiLocale(language);
+}
+
+const UI_LANGUAGE_NAMES: Record<UiLanguage, string> = {
+  zh: '中文',
+  en: 'English',
+  ko: '한국어',
+};
+
+export function getUiLanguageName(language: UiLanguage): string {
+  return UI_LANGUAGE_NAMES[language];
 }
 
 function getStoredUiLanguage(storage?: Storage | null): UiLanguage | null {
@@ -45,47 +73,20 @@ export function persistUiLanguage(storage: Storage | null, language: UiLanguage)
   }
 }
 
-function getBrowserUiLanguage(navigatorLike?: Pick<Navigator, 'language' | 'languages'> | null): UiLanguage {
-  const languageCandidates = [
-    ...(Array.isArray(navigatorLike?.languages) ? navigatorLike?.languages ?? [] : []),
-    navigatorLike?.language,
-  ].filter((language): language is string => Boolean(language));
-
-  for (const candidate of languageCandidates) {
-    const normalized = candidate.toLowerCase();
-    if (normalized.startsWith('zh')) {
-      return 'zh';
-    }
-    if (normalized.startsWith('en')) {
-      return 'en';
-    }
-  }
-
-  return 'zh';
-}
-
 export function resolveInitialUiLanguage({
   storage,
-  navigatorLike,
 }: {
   storage?: Storage | null;
-  navigatorLike?: Pick<Navigator, 'language' | 'languages'> | null;
 } = {}): UiLanguage {
-  const stored = getStoredUiLanguage(storage);
-  if (stored) {
-    return stored;
-  }
-
-  return getBrowserUiLanguage(navigatorLike);
+  return getStoredUiLanguage(storage) ?? DEFAULT_UI_LANGUAGE;
 }
 
 export function getRuntimeInitialLanguage(): UiLanguage {
   if (typeof window === 'undefined') {
-    return 'zh';
+    return DEFAULT_UI_LANGUAGE;
   }
 
   return resolveInitialUiLanguage({
     storage: getUiLanguageStorage(),
-    navigatorLike: window.navigator,
   });
 }

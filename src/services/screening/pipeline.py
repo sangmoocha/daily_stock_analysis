@@ -79,7 +79,7 @@ def screen(
 
     Args:
         strategy: Strategy name (matches a YAML file in strategies/).
-        market: Market scope, currently only "cn".
+        market: Market scope: "cn", "us" or "kr".
         max_output: Override max output count from strategy.
         use_llm: Whether to use LLM for L2 ranking.
         llm_context: Optional market/news/theme context supplied to the LLM ranker.
@@ -112,8 +112,8 @@ def screen(
     if config is None:
         config = Config.from_env()
 
-    if market not in ("cn", "us"):
-        raise ValueError(f"Unsupported market: {market!r} (supported: cn, us)")
+    if market not in ("cn", "us", "kr"):
+        raise ValueError(f"Unsupported market: {market!r} (supported: cn, us, kr)")
 
     run_id = uuid.uuid4().hex[:12]
     degradation: list[str] = []

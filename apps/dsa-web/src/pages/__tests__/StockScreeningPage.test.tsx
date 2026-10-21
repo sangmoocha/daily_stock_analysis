@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScreeningHotspotDetail } from '../../api/screening';
 import StockScreeningPage from '../StockScreeningPage';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../utils/uiLanguage';
 
 const {
   enableScreening,
@@ -1046,7 +1048,7 @@ describe('StockScreeningPage', () => {
     expect(await screen.findByText('选股已开启')).toBeInTheDocument();
 
     const marketSelect = screen.getByLabelText('市场') as HTMLSelectElement;
-    expect(Array.from(marketSelect.options).map((option) => option.value)).toEqual(['cn']);
+    expect(Array.from(marketSelect.options).map((option) => option.value)).toEqual(['cn', 'kr']);
 
     const strategySelect = screen.getByLabelText('策略') as HTMLSelectElement;
     expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
@@ -1070,6 +1072,43 @@ describe('StockScreeningPage', () => {
       strategy: 'shrink_pullback',
       maxResults: 3,
     });
+  });
+
+  it('filters strategies by market and selects a Korean strategy', async () => {
+    getStrategies.mockResolvedValueOnce({
+      enabled: true,
+      strategies: [
+        { id: 'dual_low', name: '双低', description: 'desc', category: '价值', marketScope: ['cn'] },
+        {
+          id: 'kr_large_cap_quality',
+          name: '韩国大盘质量',
+          description: 'desc',
+          category: '质量',
+          marketScope: ['kr'],
+        },
+      ],
+      strategyCount: 2,
+    });
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+
+    const marketSelect = screen.getByLabelText('市场') as HTMLSelectElement;
+    const strategySelect = screen.getByLabelText('策略') as HTMLSelectElement;
+    expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
+      '双低',
+      '自定义策略…',
+    ]);
+
+    fireEvent.change(marketSelect, { target: { value: 'kr' } });
+
+    await waitFor(() => expect(strategySelect.value).toBe('kr_large_cap_quality'));
+    expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
+      '韩国大盘质量',
+      '自定义策略…',
+    ]);
   });
 
   it('clears previous screening candidates when strategy changes', async () => {
@@ -2356,5 +2395,31 @@ describe('StockScreeningPage', () => {
     expect(await screen.findByText('暂无带来源的价格、消息或事件证据')).toBeInTheDocument();
     expect(screen.getByText(/来源：screening · 质量：unknown/)).toBeInTheDocument();
     expect(screen.queryByText('涨跌幅：+0.00%')).not.toBeInTheDocument();
+  });
+
+  it('renders the screening page in Korean when Korean is selected', async () => {
+    localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'ko');
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+
+    try {
+      render(
+        <UiLanguageProvider>
+          <StockScreeningPage />
+        </UiLanguageProvider>,
+      );
+
+      expect(await screen.findByText('종목 선별 사용 중')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '종목 선별' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '핫 테마' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /종목 선별 실행/ })).toBeInTheDocument();
+      expect(screen.getByLabelText('시장')).toBeInTheDocument();
+      expect(screen.getByLabelText('전략')).toHaveValue('dual_low');
+      expect(screen.getByRole('option', { name: '더블 로우 선별' })).toBeInTheDocument();
+      expect(screen.queryByText('Dual Low')).not.toBeInTheDocument();
+      expect(screen.queryByText('选股已开启')).not.toBeInTheDocument();
+      expect(screen.queryByText('运行选股')).not.toBeInTheDocument();
+    } finally {
+      localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
+    }
   });
 });

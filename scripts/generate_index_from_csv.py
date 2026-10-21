@@ -88,12 +88,13 @@ def load_csv_data(csv_path: Path) -> List[Dict[str, Any]]:
     return stocks
 
 
-def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
+def load_tushare_data(data_dir: Path, only_market: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     从 Tushare CSV 文件加载多市场股票数据
 
     Args:
         data_dir: 数据目录路径
+        only_market: 仅加载指定市场（用于仅刷新 JP/KR seed）
 
     Returns:
         合并后的股票列表
@@ -117,7 +118,10 @@ def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
         'KR': _csv_path('stock_list_kr.csv'),
     }
 
+    normalized_only_market = only_market.upper().strip() if only_market else None
     for market_name, csv_file in market_files.items():
+        if normalized_only_market and market_name != normalized_only_market:
+            continue
         if not csv_file.exists():
             print(f"[Warning] 未找到文件：{csv_file}")
             continue
@@ -970,6 +974,55 @@ def run_index_only(output_path: Path, *, test: bool = False) -> List[List[Any]]:
     return merged
 
 
+def run_seed_market(
+    output_path: Path,
+    market: str,
+    *,
+    test: bool = False,
+) -> List[List[Any]]:
+    """Rebuild one seed-backed market and merge it into an existing index.
+
+    JP/KR seeds can be refreshed without a Tushare token.  All other markets
+    and the index-registry rows are preserved in their original order; the
+    rebuilt market rows are appended sorted by canonical code.
+    """
+    market = market.upper().strip()
+    if market not in {"JP", "KR"}:
+        raise ValueError(f"unsupported seed market: {market!r}")
+
+    data_dir = Path(__file__).parent.parent / "data"
+    stocks = load_tushare_data(data_dir, only_market=market)
+    if not stocks:
+        raise ValueError(f"no seed rows loaded for market {market}")
+
+    rebuilt = compress_index(build_stock_index(stocks))
+    rebuilt.sort(key=lambda item: str(item[0]))
+    validate_stock_index_payload(rebuilt, min_items=0)
+
+    existing = _load_existing_payload(output_path)
+    validate_stock_index_payload(existing, min_items=0)
+    preserved = [
+        item
+        for item in existing
+        if not (len(item) > 7 and item[6] == market and item[7] == "stock")
+    ]
+
+    existing_codes = {str(item[0]) for item in preserved}
+    rebuilt_codes = [str(item[0]) for item in rebuilt]
+    if len(rebuilt_codes) != len(set(rebuilt_codes)):
+        raise ValueError(f"duplicate canonical codes in rebuilt {market} rows")
+    collisions = sorted(existing_codes.intersection(rebuilt_codes))
+    if collisions:
+        preview = ", ".join(collisions[:5])
+        raise ValueError(f"rebuilt {market} rows collide with existing identities: {preview}")
+
+    merged = preserved + rebuilt
+    validate_stock_index_payload(merged, min_items=0)
+    if not test:
+        _atomic_write_json(output_path, merged)
+    return merged
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='从 CSV 生成股票自动补全索引')
@@ -985,11 +1038,19 @@ def main():
         help='仅合并指数注册表 seed 到现有压缩 JSON，不重建股票索引'
     )
     parser.add_argument(
+        '--seed-market',
+        choices=['JP', 'KR'],
+        default=None,
+        help='仅重建指定 seed 市场（JP/KR）并合并到现有索引，不需要 Tushare'
+    )
+    parser.add_argument(
         '--test', '-t',
         action='store_true',
         help='测试模式：只验证不写入文件'
     )
     args = parser.parse_args()
+    if args.index_only and args.seed_market:
+        parser.error('--index-only 与 --seed-market 不能同时使用')
 
     print("=" * 60)
     print("股票索引生成工具（从 CSV）")
@@ -1003,6 +1064,25 @@ def main():
         Path(__file__).parent.parent / "apps" / "dsa-web" / "public" / "stocks.index.json"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # --seed-market: 只重建 JP/KR seed 市场，并保留其他市场与指数行。
+    if args.seed_market:
+        print(f"数据源：seed-market={args.seed_market}")
+        print("\n[1/3] 读取 seed 并重建市场索引...")
+        merged = run_seed_market(output_path, args.seed_market, test=args.test)
+        market_rows = [
+            item
+            for item in merged
+            if len(item) > 7 and item[6] == args.seed_market and item[7] == "stock"
+        ]
+        print(f"      {args.seed_market} 股票 {len(market_rows)} 条，合并后共 {len(merged)} 条")
+        if args.test:
+            print("\n[2/3] 测试模式：跳过写入文件")
+        else:
+            print(f"\n[2/3] 写入文件：{output_path}")
+            print(f"      文件大小：{output_path.stat().st_size / 1024:.2f} KB")
+        print("\n[3/3] 验证通过")
+        return 0
 
     # --index-only: 只合并指数 seed，不重建股票索引。
     if args.index_only:

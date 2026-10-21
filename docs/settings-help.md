@@ -13,20 +13,20 @@
 - `docs`：相关文档链接，优先指向仓库内已有专题文档或完整指南。
 - `warning_codes`：面向前端或后续校验扩展的稳定提示 code。
 
-前端长文案维护在 `apps/dsa-web/src/locales/settingsHelp.ts`：
+前端长文案维护在 `apps/dsa-web/src/locales/settingsHelp.ts` 与 `apps/dsa-web/src/locales/settingsHelp.ko.ts`：
 
-- 默认展示中文文案。
-- 英文文案保留同样结构，便于后续扩展语言切换。
-- 文案应解释用途、取值说明、影响范围、注意事项和相关文档，不应复制完整专题文档。
+- `settingsHelp.ts` 维护中文和英文文案，默认展示中文文案。
+- `settingsHelp.ko.ts` 维护韩文文案，key 与英文结构保持一致；缺失 key 回退英文，避免回退中文。
+- 各语言文案应解释用途、取值说明、影响范围、注意事项和相关文档，不应复制完整专题文档。
 
 ## WebUI 语言说明（非配置项）
 
-本项目新增独立的 WebUI 界面语言能力（`zh` / `en`），用于静态页面文案、导航与通用控件文案。该状态与 `REPORT_LANGUAGE` 解耦，不改写报告语言语义。
+本项目新增独立的 WebUI 界面语言能力（`zh` / `en` / `ko`），用于静态页面文案、导航与通用控件文案。该状态与 `REPORT_LANGUAGE` 解耦，不改写报告语言语义。
 
 - 状态键：`dsa.uiLanguage`（`localStorage`，浏览器端持久化）。
-- 初始化优先级：`localStorage` 有效值优先，其次识别浏览器语言（`zh-*` / `en-*`），最后回退 `zh`。
+- 初始化优先级：`localStorage` 有效值优先；无有效值时默认 `ko`（不依赖浏览器语言）。
 - 该语言开关不属于 `.env` 配置字段，不在 `system/config` 的可配置字段清单中体现。
-- 界面切换会同步 `document.documentElement.lang`（`zh-CN` 或 `en`）以利于可访问性与无障碍语义。
+- 界面切换会同步 `document.documentElement.lang`（`zh-CN` / `en-US` / `ko-KR`）以利于可访问性与无障碍语义。
 
 ## 覆盖范围
 

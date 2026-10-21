@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../../utils/uiLanguage';
 import { LLMChannelEditor } from '../LLMChannelEditor';
 
 const {
@@ -26,6 +28,10 @@ describe('LLMChannelEditor', () => {
     update.mockReset();
     testLLMChannel.mockReset();
     discoverLLMChannelModels.mockReset();
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
   });
 
   function selectOptionValues(label: string): string[] {
@@ -2541,5 +2547,35 @@ describe('LLMChannelEditor', () => {
       expect(screen.getByLabelText('模型（逗号分隔）')).toHaveValue('qwen-old');
       expect(screen.queryByLabelText('stale-openai')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders the full editor in Korean, including provider presets', async () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'ko');
+
+    render(
+      <UiLanguageProvider>
+        <LLMChannelEditor
+          items={openAiItems}
+          configVersion="v1"
+          maskToken="******"
+          onSaved={() => {}}
+        />
+      </UiLanguageProvider>,
+    );
+
+    expect(screen.getByText('AI 모델 구성')).toBeInTheDocument();
+    expect(screen.getByText('채널 관리')).toBeInTheDocument();
+    expect(screen.getByText('채널 1개')).toBeInTheDocument();
+    expect(screen.getByText('모델 1개 구성됨')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ 채널 추가' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /OpenAI 공식/i })).toBeInTheDocument();
+    expect(screen.queryByText('AI 模型配置')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI 공식/i }));
+
+    expect(await screen.findByLabelText('채널 이름')).toHaveValue('openai');
+    expect(screen.getByLabelText('모델(쉼표 구분)')).toHaveValue('gpt-4o-mini');
+    expect(screen.getByRole('button', { name: '연결 테스트' })).toBeInTheDocument();
+    expect(screen.getByText('런타임 능력 검사(선택)')).toBeInTheDocument();
   });
 });

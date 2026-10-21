@@ -203,7 +203,7 @@ def test_false_observation_is_preserved_as_a_failed_boolean_condition():
     assert check["missing_reason"] is None
 
 
-@pytest.mark.parametrize("strategy,market", [("empty", "cn"), ("american", "us")])
+@pytest.mark.parametrize("strategy,market", [("empty", "cn"), ("american", "us"), ("korean", "kr")])
 def test_custom_catalog_strategy_with_no_conditions_passes(client, tmp_path, monkeypatch, strategy, market):
     (tmp_path / "custom.yaml").write_text(
         f"name: {strategy}\nversion: '2'\nscreening:\n  enabled: true\n"

@@ -1,0 +1,75 @@
+# Derived from AlphaSift revision 9f522747caafd3c0b1ddb7e14d5cf44c8580b6cf.
+# Licensed under Apache-2.0 and modified for daily_stock_analysis.
+# 韩国超跌反转策略
+name: kr_oversold_reversal
+display_name: 韩国超跌反转
+description: 在 KOSPI/KOSDAQ 中寻找跌幅可控、流动性仍在且具备修复观察价值的反转候选
+version: "1.0"
+category: reversal
+tags: [korea, reversal, oversold, repair]
+analysis_skills: [bottom_volume]
+style:
+  risk_profile: balanced
+  holding_period: short_term
+  execution_style: reversal
+  market_regime: [oversold_repair, range_bound]
+  capital_profile: medium_liquidity
+  ui_badge: 韩股反转
+
+screening:
+  enabled: true
+  market_scope: [kr]
+  hard_filters:
+    exclude_st: false
+    amount_min: 2000000000
+    market_cap_min: 20000000000
+    price_min: 500
+    price_max: 1000000
+    change_pct_min: -12.0
+    change_pct_max: -1.0
+    turnover_rate_min: 0.3
+    rsi_status_whitelist: [oversold, neutral]
+    change_60d_max: 5.0
+    volatility_20d_pct_max: 55.0
+    max_drawdown_20d_pct_min: -18.0
+  tech_weight: 0.50
+  factor_weights:
+    reversal: 0.36
+    stability: 0.24
+    liquidity: 0.18
+    activity: 0.12
+    momentum: 0.10
+  scoring_profile:
+    reversal_ideal_change_pct: -4.0
+    reversal_collapse_start_pct: -9.0
+    reversal_collapse_penalty_slope: 12.0
+    reversal_chase_start_pct: -0.5
+    rsi_oversold_bonus: 14.0
+    momentum_downside_start_pct: -5.0
+    activity_ideal_volume_ratio: 1.6
+    activity_ideal_turnover_rate: 2.0
+  risk_profile:
+    breakdown_change_pct: -11.0
+    chase_change_pct: 3.0
+    abnormal_volume_ratio: 5.5
+    high_turnover_rate: 14.0
+    weak_signal_score: 35.0
+  portfolio_profile:
+    max_same_bucket: 1
+    concentration_penalty: 4.0
+    buckets:
+      半导体: [반도체, 半导体, 반도체장비]
+      汽车: [자동차, 汽车, 자동차부품]
+      生物医药: [바이오, 生物, 제약, 医药]
+      消费: [유통, 消费, 식품, 食品]
+      周期: [철강, 钢铁, 화학, 化工, 有色]
+  scorecard_profile:
+    controlled_reversal_min: 70.0
+    controlled_reversal_bonus: 2.0
+    volume_spike_ratio: 5.5
+  ranking_hints: |
+    优先关注：
+    1. 下跌幅度可控、不是基本面或退市风险驱动的连续杀跌
+    2. 成交额和换手仍能支撑后续修复，避免流动性塌陷
+    3. 若存在错杀、事件落地或板块修复线索，可提高优先级
+  max_output: 5

@@ -1,7 +1,7 @@
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { formatUiText, UI_TEXT, type UiLanguage, type UiTextKey, type UiTextParams } from '../i18n/uiText';
-import { getRuntimeInitialLanguage, getUiLanguageStorage, persistUiLanguage } from '../utils/uiLanguage';
+import { getRuntimeInitialLanguage, getUiDocumentLanguage, getUiLanguageStorage, persistUiLanguage } from '../utils/uiLanguage';
 
 type UiLanguageContextValue = {
   language: UiLanguage;
@@ -27,7 +27,7 @@ export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN';
+      document.documentElement.lang = getUiDocumentLanguage(language);
     }
   }, [language]);
 

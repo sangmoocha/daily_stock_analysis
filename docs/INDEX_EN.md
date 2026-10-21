@@ -80,6 +80,7 @@ This is the entry point for project documentation. The README covers the project
 | --- | --- |
 | [Chinese Documentation Index](INDEX.md) | Chinese documentation entry point |
 | [Traditional Chinese README](README_CHT.md) | Traditional Chinese project overview and quick start |
+| [LLM Setup Guide (Korean)](llm-setup-ko.md) <sub><sub>![Korean](https://img.shields.io/badge/lang-ko-blue?style=flat)</sub></sub> (Korean-only) | Supported providers, three-layer configuration, and NVIDIA Nemotron setup with measured results |
 
 ## China-Market Glossary
 

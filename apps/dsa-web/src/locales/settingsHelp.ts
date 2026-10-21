@@ -1,4 +1,5 @@
 import type { SystemConfigDocLink } from '../types/systemConfig';
+import { settingsHelpKo } from './settingsHelp.ko';
 
 export interface SettingsHelpContent {
   title: string;
@@ -12,7 +13,7 @@ export interface SettingsHelpContent {
   docs?: SystemConfigDocLink[];
 }
 
-type SettingsHelpMap = Record<string, SettingsHelpContent>;
+export type SettingsHelpMap = Record<string, SettingsHelpContent>;
 
 const settingsHelpZhCN: SettingsHelpMap = {
   'settings.base.STOCK_LIST': {
@@ -2517,7 +2518,19 @@ const settingsHelpEnUS: SettingsHelpMap = {
 };
 
 function getPreferredHelpMap(locale?: string | null): SettingsHelpMap {
-  if (locale?.toLowerCase().startsWith('en')) {
+  const normalized = locale?.toLowerCase() ?? '';
+  if (normalized.startsWith('en')) {
+    return settingsHelpEnUS;
+  }
+  if (normalized.startsWith('ko')) {
+    return settingsHelpKo;
+  }
+  return settingsHelpZhCN;
+}
+
+function getHelpFallbackMap(locale?: string | null): SettingsHelpMap {
+  const normalized = locale?.toLowerCase() ?? '';
+  if (normalized.startsWith('en') || normalized.startsWith('ko')) {
     return settingsHelpEnUS;
   }
   return settingsHelpZhCN;
@@ -2532,14 +2545,19 @@ export function getSettingsHelpContent(
     return null;
   }
 
-  const localized = getPreferredHelpMap(locale)[helpKey] ?? settingsHelpZhCN[helpKey];
+  const normalized = locale?.toLowerCase() ?? '';
+  const localized = getPreferredHelpMap(locale)[helpKey] ?? getHelpFallbackMap(locale)[helpKey];
   if (localized) {
     return localized;
   }
 
   if (fallbackDescription) {
     return {
-      title: locale?.toLowerCase().startsWith('en') ? 'Configuration help' : '配置说明',
+      title: normalized.startsWith('en')
+        ? 'Configuration help'
+        : normalized.startsWith('ko')
+          ? '설정 안내'
+          : '配置说明',
       summary: fallbackDescription,
     };
   }

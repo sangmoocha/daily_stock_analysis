@@ -11,8 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
+- [文档] 新增韩语 LLM 配置指南 `docs/llm-setup-ko.md`，整理已支持 provider 清单、三层配置方式、功能概览，以及 NVIDIA Nemotron 3 Ultra 的实测接入结果与限制。
+- [新功能] WebUI 界面语言新增韩语（`dsa.uiLanguage=ko`），覆盖导航、登录页、设置页、交易/告警/回测/持仓等页面文案与配置帮助；语言切换改为可显式选择中文/English/한국어，未保存选择时默认使用韩语。
+- [新功能] 韩国股票自动补全索引接入 OpenDART：`DART_API_KEY` 可刷新 `stock_list_kr.csv`，新增 `fetch_dart_stock_list.py` 与 `generate_index_from_csv.py --seed-market KR`，支持用 6 位韩股代码、8 位 DART 公司编号、韩文/英文公司名搜索；退市公司与 KONEX 默认过滤。
+- [改进] 选股页面支持韩语界面，覆盖策略选择、热点题材、运行详情、结果表格、入选原因与历史记录；内置策略名称和描述在韩语/英语界面下本地化显示，中文界面继续使用后端返回文案。
+- [改进] 持仓管理页（`/portfolio`）补齐韩语：新建账户、手工录入交易/资金流水/公司行为、券商 CSV 导入、事件记录、删除确认，以及价格来源、买卖方向、资金方向、公司行为和内置券商名称等标签；中文界面保持原有文案。
+- [改进] 设置页 LLM 渠道编辑器与 provider 预设补齐韩语：渠道管理、模型发现、连接/能力测试、运行时模型参数、错误提示及服务商标签均按界面语言显示；中文/English 文案保持原有行为。
+- [新功能] 选股新增韩国市场（KOSPI/KOSDAQ）：使用 OpenDART/KRX 股票池与 DART 公司编号，行情、成交额、市值和换手来自 Naver Finance；新增 `kr_large_cap_quality`、`kr_momentum_breakout`、`kr_oversold_reversal` 三个韩股策略，Web 市场选择会按 `market_scope` 过滤策略，并提供独立韩股快照缓存。
 - [新功能] 韩股问股/分析新增 Naver Finance 实时行情与投资者资金流：实时报价默认 Naver、失败回退 Yahoo；新增 `get_investor_flow` 工具，输出外资/机构/个人净买卖（股数）、外资持股比例及 5/10 日累计；支持 `삼성전자 어때?` 这类韩语对象问句与 `.KS/.KQ` 代码，韩文消息中的裸 6 位韩股代码会要求补充后缀；`KR_REALTIME_SOURCE=yfinance` 可恢复 Yahoo-only 报价路径。
 - [文档] 补充韩股 Naver 实时行情与投资者资金流的接口边界、可选环境变量、失败回退和回滚方式到 `docs/market-support.md`。
+- [修复] 修复韩语（`REPORT_LANGUAGE=ko`）个股汇总报告无法生成的问题：实时行情来源显示名映射只覆盖 `zh`/`en`，而查询按规范化后的报告语言取值，导致韩语报告在渲染行情快照时抛出 `KeyError: 'ko'`、本地报告不再保存；现补齐 `ko` 文案，新增语言覆盖守卫与回归测试。
 
 ## [3.33.0] - 2026-10-15
 

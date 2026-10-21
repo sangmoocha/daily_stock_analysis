@@ -103,8 +103,33 @@ def test_bundled_strategies_are_loaded_from_the_internal_package() -> None:
         "quality_value",
         "shrink_pullback",
         "volume_breakout",
+        "kr_large_cap_quality",
+        "kr_momentum_breakout",
+        "kr_oversold_reversal",
     }
     assert strategies["dual_low"].screening.factor_weights["value"] < 0.40
+
+
+def test_korean_strategies_are_kr_scoped_and_avoid_pe_pb_filters() -> None:
+    strategies = load_all_strategies(SCREENING_ROOT / "strategies")
+
+    korean = {
+        name: strategy
+        for name, strategy in strategies.items()
+        if name.startswith("kr_")
+    }
+
+    assert set(korean) == {
+        "kr_large_cap_quality",
+        "kr_momentum_breakout",
+        "kr_oversold_reversal",
+    }
+    for strategy in korean.values():
+        assert strategy.screening.market_scope == ["kr"]
+        assert strategy.screening.hard_filters.pe_ttm_min is None
+        assert strategy.screening.hard_filters.pe_ttm_max is None
+        assert strategy.screening.hard_filters.pb_min is None
+        assert strategy.screening.hard_filters.pb_max is None
 
 
 def test_list_strategies_preserves_legacy_strategies_dir_override() -> None:

@@ -5,6 +5,7 @@ import {
   formatMoney,
   formatPositionMoney,
   formatPositionPrice,
+  formatSideLabel,
   formatSignedPct,
   getCsvCommitVariant,
   getCsvParseVariant,
@@ -53,6 +54,22 @@ describe('portfolioFormat', () => {
     expect(formatBrokerLabel('custom', ' 自定义 ')).toBe('custom（自定义）');
     expect(getCsvParseVariant({ broker: 'huatai', recordCount: 1, skippedCount: 1, errorCount: 0, records: [], errors: [] })).toBe('warning');
     expect(getCsvCommitVariant({ accountId: 1, recordCount: 1, insertedCount: 1, duplicateCount: 0, failedCount: 0, dryRun: false, errors: [] }, false)).toBe('success');
+  });
+
+  it('localizes price, side, broker, and FX feedback labels', () => {
+    expect(getPositionPriceLabel(pricedPosition, 'ko')).toBe('실시간 가격 · longbridge');
+    expect(formatSideLabel('buy', 'ko')).toBe('매수');
+    expect(formatBrokerLabel('huatai', '华泰', 'ko')).toBe('huatai (화타이)');
+    expect(buildFxRefreshFeedback({
+      asOf: '2026-03-19',
+      accountCount: 1,
+      refreshEnabled: true,
+      disabledReason: null,
+      pairCount: 1,
+      updatedCount: 1,
+      staleCount: 0,
+      errorCount: 0,
+    }, 'ko').text).toBe('환율을 새로 고쳤습니다. 1개 쌍 업데이트.');
   });
 
   it('builds FX refresh feedback from refresh outcomes', () => {

@@ -31,7 +31,7 @@ class ScreeningScreenRequest(BaseModel):
 
 
 class ScreeningCheckRequest(BaseModel):
-    market: Literal["cn", "us"] = "cn"
+    market: Literal["cn", "us", "kr"] = "cn"
     strategy: str = Field("dual_low", min_length=1, max_length=64)
     snapshot: Dict[str, Any] = Field(description="One supplied row; no live data is fetched")
 
@@ -58,7 +58,7 @@ class ScreeningConditionCheck(BaseModel):
 class ScreeningCheckResponse(BaseModel):
     strategy: str
     strategy_version: str
-    market: Literal["cn", "us"]
+    market: Literal["cn", "us", "kr"]
     provenance: Literal["supplied_snapshot"] = "supplied_snapshot"
     passed: bool
     checks: List[ScreeningConditionCheck]

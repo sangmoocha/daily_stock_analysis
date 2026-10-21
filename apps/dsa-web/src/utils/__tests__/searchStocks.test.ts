@@ -82,10 +82,10 @@ const mockIndex: StockIndexItem[] = [
   {
     canonicalCode: "005930.KS",
     displayCode: "005930.KS",
-    nameZh: "三星电子",
-    pinyinFull: "sanxingdianzi",
-    pinyinAbbr: "sxdz",
-    aliases: ["Samsung", "Samsung Electronics", "三星"],
+    nameZh: "삼성전자",
+    pinyinFull: "삼성전자",
+    pinyinAbbr: "삼성전자",
+    aliases: ["Samsung", "Samsung Electronics", "삼성전자(주)", "三星电子", "三星", "00126380"],
     market: "KR",
     assetType: "stock",
     active: true,
@@ -281,6 +281,27 @@ describe('searchStocks', () => {
     const results = searchStocks('三星', mockIndex);
     expect(results).toHaveLength(1);
     expect(results[0].canonicalCode).toBe('005930.KS');
+  });
+
+  test('韩股韩文公司名匹配', () => {
+    const results = searchStocks('삼성전자', mockIndex);
+    expect(results).toHaveLength(1);
+    expect(results[0].canonicalCode).toBe('005930.KS');
+    expect(results[0].matchField).toBe('name');
+  });
+
+  test('DART 8자리 고유번호 alias 매칭', () => {
+    const results = searchStocks('00126380', mockIndex);
+    expect(results).toHaveLength(1);
+    expect(results[0].canonicalCode).toBe('005930.KS');
+    expect(results[0].matchField).toBe('alias');
+  });
+
+  test('한국 회사 영문명 alias 매칭', () => {
+    const results = searchStocks('Samsung Electronics', mockIndex);
+    expect(results).toHaveLength(1);
+    expect(results[0].canonicalCode).toBe('005930.KS');
+    expect(results[0].matchField).toBe('alias');
   });
 
   describe('Edge case tests', () => {

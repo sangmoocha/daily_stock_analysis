@@ -183,20 +183,26 @@ def fetch_daily_history(
     configured, then Tencent's direct HTTP K-line endpoint before wrapper-based
     free sources. Without a token it starts with Tencent. Sina is a second
     direct HTTP K-line source before wrapper-based fallbacks. ``yfinance`` is
-    explicit-only (never part of ``auto``) and expects a US ticker rather than
-    an A-share code. Lagging bars do not stop the auto fallback chain; they are
+    explicit-only for A-shares/US tickers; Korean ``.KS``/``.KQ`` symbols use
+    it automatically because the A-share sources do not serve KOSPI/KOSDAQ.
+    Lagging bars do not stop the auto fallback chain; they are
     retained for degraded use only if no source provides fresh history.
     """
     normalized_code = _normalize_daily_code(code)
     normalized_lookback_days = int(lookback_days)
+    market = get_market_for_stock(normalized_code) or get_market_for_stock(str(code))
     src = _normalize_daily_source(source)
     if src == "auto":
-        sources: tuple[str, ...] = (
-            ("tushare", "tencent", "sina", "akshare", "baostock")
-            if _has_tushare_token()
-            else ("tencent", "sina", "akshare", "baostock")
-        )
-        sources, source_order_notes = _rank_daily_sources_by_health(sources)
+        if market == "kr":
+            sources: tuple[str, ...] = ("yfinance",)
+            source_order_notes = ["kr:yfinance"]
+        else:
+            sources = (
+                ("tushare", "tencent", "sina", "akshare", "baostock")
+                if _has_tushare_token()
+                else ("tencent", "sina", "akshare", "baostock")
+            )
+            sources, source_order_notes = _rank_daily_sources_by_health(sources)
     elif src in ("akshare", "baostock", "tushare", "tencent", "sina", "yfinance"):
         sources = (src,)
         source_order_notes = []
@@ -226,9 +232,16 @@ def fetch_daily_history(
         for attempt in range(attempts):
             try:
                 if current == "yfinance":
-                    from src.services.screening.snapshot_us import fetch_daily_history_yfinance
+                    if market == "kr":
+                        from src.services.screening.snapshot_kr import fetch_daily_history_yfinance_kr
+
+                        yfinance_fetcher = fetch_daily_history_yfinance_kr
+                    else:
+                        from src.services.screening.snapshot_us import fetch_daily_history_yfinance
+
+                        yfinance_fetcher = fetch_daily_history_yfinance
                     result = _call_daily_wrapper(
-                        fetch_daily_history_yfinance,
+                        yfinance_fetcher,
                         current,
                         code,
                         lookback_days=lookback_days,
@@ -344,6 +357,12 @@ def _normalize_daily_code(value: object) -> str:
         return ""
     if text.endswith(".0") and text[:-2].isdigit():
         text = text[:-2]
+    # Offshore Yahoo suffixes identify the exchange and must survive
+    # normalization. Stripping ``.KS``/``.KQ`` would turn a Korean symbol into
+    # an A-share code and make the freshness check use the wrong calendar.
+    upper_text = text.upper()
+    if any(upper_text.endswith(suffix) for suffix in (".KS", ".KQ", ".T", ".TW", ".TWO")):
+        return upper_text
     if text.isdigit():
         return text.zfill(6)[-6:]
     digits = "".join(ch for ch in text if ch.isdigit())

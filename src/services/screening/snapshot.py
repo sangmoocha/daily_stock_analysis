@@ -74,6 +74,13 @@ def fetch_snapshot_with_fallback(
     """Try live sources, optionally falling back to the last-good snapshot."""
     if market == "us":
         return _fetch_us_snapshot_with_fallback(required_columns)
+    if market == "kr":
+        return _fetch_kr_snapshot_with_fallback(
+            required_columns,
+            fallback_snapshot_path=fallback_snapshot_path,
+            fallback_max_age_hours=fallback_max_age_hours,
+            cache_ttl_seconds=cache_ttl_seconds,
+        )
 
     errors = []
     required = required_columns or []
@@ -146,6 +153,71 @@ def _fetch_us_snapshot_with_fallback(
     if missing:
         logger.warning("US snapshot missing columns: %s", ",".join(missing))
     return df
+
+
+def _market_scoped_snapshot_path(path_like: str | Path | None, market: str) -> Path | None:
+    if path_like is None:
+        return None
+    path = Path(path_like)
+    return path.with_name(f"{path.stem}.{market}{path.suffix}")
+
+
+def _fetch_kr_snapshot_with_fallback(
+    required_columns: list[str] | None = None,
+    *,
+    fallback_snapshot_path: str | Path | None = None,
+    fallback_max_age_hours: float | None = None,
+    cache_ttl_seconds: float = 0.0,
+) -> pd.DataFrame:
+    """Fetch the Korean snapshot, reusing a market-scoped last-good cache."""
+    from src.services.screening.snapshot_kr import fetch_kr_snapshot
+
+    required = required_columns or []
+    cache_path = _market_scoped_snapshot_path(fallback_snapshot_path, "kr")
+    if cache_ttl_seconds > 0:
+        cached = _read_last_good_snapshot(
+            cache_path,
+            required_columns=required,
+            source_errors=[],
+            max_age_hours=cache_ttl_seconds / 3600.0,
+            fresh=True,
+        )
+        if cached is not None:
+            return cached
+
+    errors: list[str] = []
+    try:
+        df = _call_snapshot_wrapper(fetch_kr_snapshot, source="naver_kr")
+        if df.empty:
+            raise RuntimeError("Naver returned empty Korean snapshot")
+        missing = _missing_required_columns(df, required)
+        if missing:
+            raise RuntimeError(f"missing required columns {','.join(missing)}")
+        df.attrs.setdefault("snapshot_source", "naver_dart")
+        df.attrs["source_errors"] = []
+        df.attrs["fallback_used"] = False
+        df.attrs["stale"] = False
+        df.attrs["stale_age_hours"] = None
+        _write_last_good_snapshot(
+            cache_path,
+            df,
+            source_priority=["naver_dart"],
+        )
+        logger.info("Korean snapshot fetched: %d rows", len(df))
+        return df
+    except Exception as exc:  # noqa: BLE001 - fall through to cache.
+        errors.append(f"naver_kr: {exc}")
+        logger.warning("Korean snapshot source failed: %s", exc)
+
+    cached = _read_last_good_snapshot(
+        cache_path,
+        required_columns=required,
+        source_errors=errors,
+        max_age_hours=fallback_max_age_hours,
+    )
+    if cached is not None:
+        return cached
+    raise RuntimeError(f"All Korean snapshot sources failed: {'; '.join(errors)}")
 
 
 def _missing_required_columns(df: pd.DataFrame, required_columns: list[str]) -> list[str]:

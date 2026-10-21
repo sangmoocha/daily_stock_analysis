@@ -6,6 +6,12 @@ Default flow:
 1. Fetch Tushare stock lists into ``data/`` with ``--a-rk`` for A-share name correction.
 2. Generate ``apps/dsa-web/public/stocks.index.json`` from CSV plus JP/KR seed rows.
 3. Copy the generated index to ``static/stocks.index.json`` for backend use.
+
+Optional Korean refresh:
+* ``--refresh-kr`` regenerates ``scripts/stock_index_seeds/stock_list_kr.csv``
+  from OpenDART (requires ``DART_API_KEY``).
+* ``--kr-only`` rebuilds only the KR rows from that seed and preserves every
+  other market, so no Tushare token is required.
 """
 
 from __future__ import annotations
@@ -61,9 +67,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="跳过 Tushare 抓取，仅用现有 data/stock_list_*.csv 重新生成索引",
     )
+    parser.add_argument(
+        "--refresh-kr",
+        action="store_true",
+        help="先用 OpenDART 刷新 scripts/stock_index_seeds/stock_list_kr.csv（需要 DART_API_KEY）",
+    )
+    parser.add_argument(
+        "--kr-only",
+        action="store_true",
+        help="仅重建 KR seed 行并合并到现有索引，不需要 Tushare token",
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.refresh_kr:
+            _run([sys.executable, "scripts/fetch_dart_stock_list.py"])
+
+        if args.kr_only:
+            print("[refresh_stock_index] rebuild KR rows only; preserving other markets")
+            _run(
+                [
+                    sys.executable,
+                    "scripts/generate_index_from_csv.py",
+                    "--seed-market",
+                    "KR",
+                ]
+            )
+            _sync_static_index()
+            print("[refresh_stock_index] done")
+            return 0
+
         if args.skip_fetch:
             print("[refresh_stock_index] skip Tushare fetch; using existing CSV files")
         else:

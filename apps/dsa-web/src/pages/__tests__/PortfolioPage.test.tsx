@@ -2430,4 +2430,25 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(screen.queryByText('Main (#1)')).not.toBeInTheDocument());
     expect(screen.getByRole('option', { name: 'Alt (#2)' })).toBeInTheDocument();
   });
+
+  it('renders Korean manual entry, CSV import, and event controls', async () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'ko');
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    expect(await screen.findByText('포트폴리오 관리')).toBeInTheDocument();
+    expect(screen.getByText('수동 입력: 거래')).toBeInTheDocument();
+    expect(screen.getByText('수동 입력: 자금 흐름')).toBeInTheDocument();
+    expect(screen.getByText('수동 입력: 기업 행동')).toBeInTheDocument();
+    expect(screen.getByText('증권사 CSV 가져오기')).toBeInTheDocument();
+    expect(screen.getByText('이벤트 기록')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '거래 제출' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이전' })).toBeInTheDocument();
+    expect(screen.queryByText('手工录入：交易')).not.toBeInTheDocument();
+  });
 });

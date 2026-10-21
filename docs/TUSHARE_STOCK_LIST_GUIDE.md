@@ -129,6 +129,43 @@ python3 scripts/generate_index_from_csv.py --test  # 先测试
 python3 scripts/generate_index_from_csv.py         # 确认后生成
 ```
 
+### 韩国股票（OpenDART）
+
+韩股 seed 可以从 [OpenDART](https://opendart.fss.or.kr/) 刷新。DART 的 `corpCode.xml` 提供 6 位韩股代码、8 位 DART 公司编号（`corp_code`）、韩文/英文公司名；默认再从 KRX 上市法人列表取得当前公司名和 `KOSPI`/`KOSDAQ`/`KONEX` 分类，按 6 位代码关联后过滤退市公司并生成 Yahoo Finance 后缀（`.KS` / `.KQ`）。这样不需要对每家公司调用一次 `company.json`，刷新更快，也不会触发 DART 的并发限流。
+
+先在 `.env` 中配置 Key：
+
+```bash
+DART_API_KEY=你的opendart_key
+```
+
+只刷新韩股 seed 并合并到现有索引，不需要 Tushare token：
+
+```bash
+python3 scripts/refresh_stock_index.py --refresh-kr --kr-only
+```
+
+也可以分步执行：
+
+```bash
+python3 scripts/fetch_dart_stock_list.py
+python3 scripts/generate_index_from_csv.py --seed-market KR
+```
+
+生成后，Web 自动补全可以用以下任一方式搜索韩国公司：
+
+- 6 位韩股代码：`005930`、`005930.KS`
+- 8 位 DART 公司编号：`00126380`
+- 韩文公司名：`삼성전자`
+- 英文公司名关键词：`Samsung`、`SK hynix`（若海外 ADR 名称完全匹配，结果中可能同时出现 ADR）
+
+说明：
+
+- 默认使用 KRX 上市法人列表做市场分类；如果 KRX 不可访问，可加 `--krx-list /path/to/corpList.xls` 使用本地文件，或改用 `--market-source dart` 逐家查询 `company.json`。
+- DART 模式会把 `company.json` 结果缓存到 `data/cache/dart_company_cache.json`，重复执行不会重复请求已成功的公司；默认 `--workers 2`，遇到连接重置可降低为 `--workers 1`。
+- 默认不写入 KONEX 公司，因为 Yahoo Finance 对 KONEX 覆盖不稳定；需要时加 `--include-konex`。
+- DART 仅在构建索引时使用，运行时搜索不会调用 DART API，也不会把 API Key 写入前端产物。
+
 ### 本地客户端自动获取最新索引
 
 新版客户端默认会从项目 GitHub `main` 分支读取最新的 `apps/dsa-web/public/stocks.index.json`，并缓存到本地 `data/cache/stocks.index.json`。前端仍访问本地 `/stocks.index.json`，不需要直接跨域请求 GitHub。

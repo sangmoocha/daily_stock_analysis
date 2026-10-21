@@ -4,9 +4,15 @@ import {
   LLM_PROVIDER_TEMPLATE_BY_ID,
   LLM_PROVIDER_TEMPLATES,
   MODEL_PLACEHOLDERS_BY_PROTOCOL,
+  getProviderCapabilityMeta,
+  getProviderSourceLabel,
   getProviderTemplate,
+  getProviderTemplateConfigHint,
+  getProviderTemplateLabel,
   isKnownProviderTemplate,
 } from '../llmProviderTemplates';
+
+const cjkPattern = /[\u3400-\u9fff]/;
 
 describe('llmProviderTemplates', () => {
   it('keeps provider template order aligned with the existing preset dropdown order', () => {
@@ -135,5 +141,43 @@ describe('llmProviderTemplates', () => {
       vertex_ai: 'gemini-3.1-pro-preview',
       ollama: 'llama3.2,qwen2.5',
     });
+  });
+
+  it('localizes every provider label and config hint in Korean', () => {
+    for (const template of LLM_PROVIDER_TEMPLATES) {
+      const label = getProviderTemplateLabel(template, 'ko');
+      expect(cjkPattern.test(label), `${template.channelId}: ${label}`).toBe(false);
+      expect(label.length).toBeGreaterThan(0);
+
+      const hint = getProviderTemplateConfigHint(template, 'ko');
+      if (template.configHint) {
+        expect(hint?.length).toBeGreaterThan(0);
+        expect(cjkPattern.test(hint || ''), `${template.channelId}: ${hint}`).toBe(false);
+      } else {
+        expect(hint).toBeUndefined();
+      }
+
+      for (const source of template.officialSources) {
+        const sourceLabel = getProviderSourceLabel(source, 'ko');
+        expect(cjkPattern.test(sourceLabel), `${template.channelId}: ${sourceLabel}`).toBe(false);
+      }
+    }
+  });
+
+  it('localizes every provider capability label and hint in Korean', () => {
+    const capabilities = Object.keys(LLM_PROVIDER_CAPABILITY_LABELS) as Array<keyof typeof LLM_PROVIDER_CAPABILITY_LABELS>;
+
+    for (const capability of capabilities) {
+      const meta = getProviderCapabilityMeta(capability, 'ko');
+      expect(cjkPattern.test(meta.label), `${capability}: ${meta.label}`).toBe(false);
+      expect(cjkPattern.test(meta.hint), `${capability}: ${meta.hint}`).toBe(false);
+    }
+  });
+
+  it('keeps the default Chinese provider presentation unchanged', () => {
+    const modelflare = getProviderTemplate('modelflare');
+    expect(modelflare).toBeDefined();
+    expect(getProviderTemplateLabel(modelflare!, 'zh')).toBe('Modelflare（聚合平台）');
+    expect(getProviderCapabilityMeta('aggregator', 'zh')).toBe(LLM_PROVIDER_CAPABILITY_LABELS.aggregator);
   });
 });

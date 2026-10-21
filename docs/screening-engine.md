@@ -36,6 +36,7 @@ SCREENING_SNAPSHOT_CALL_TIMEOUT_SEC=60
 SCREENING_DAILY_CALL_TIMEOUT_SEC=20
 SCREENING_EASTMONEY_MIN_INTERVAL_SEC=1.0
 SCREENING_EASTMONEY_JITTER_SEC=0.3
+# SCREENING_KR_UNIVERSE_FILE=
 ```
 
 路径、缓存、超时和限流项只影响选股链路。`SCREENING_SNAPSHOT_CACHE_TTL_SEC` 默认 300 秒，设为 `0` 可关闭新鲜快照复用。`SCREENING_HOTSPOT_CALL_TIMEOUT_SEC` 的正数值是默认热点 provider 单次板块、成分股或直接详情 fallback 调用的总预算，后续 fallback 和并行成分股源共用同一截止时间，并把剩余时间传入可终止的 AkShare 子进程与 HTTP socket；设为 `0/off/disabled` 只关闭这层总预算，各真实数据源仍保留自身硬超时。`SCREENING_HOTSPOT_SEARCH_TIMEOUT_SEC` 是用户主动新闻搜索的端到端截止时间，缓存 owner 等待、重新竞争和 provider 子进程共享同一个绝对 deadline；`0/off/disabled` 会回退到安全默认值 12 秒，而不是无限等待。完整示例以 `.env.example` 为准。
@@ -62,7 +63,7 @@ SCREENING_EASTMONEY_JITTER_SEC=0.3
 
 快照或日线硬过滤后没有候选的运行也保留当次策略的归一化因子权重，与非空结果一致；权重由实际执行策略在管线出口生成，服务响应和历史记录不重新读取策略目录补填缺失权重。这些元数据记录选股配置，不表示被淘汰的候选已经完成评分。
 
-`POST /api/v1/screening/screen/check` 供脚本/API 客户端解释任意一条快照为什么通过或未通过策略硬过滤。需要开启 `SCREENING_ENABLED`；与已有选股接口共用管理员认证中间件，启用认证时无有效会话返回 `401`。策略 ID 从当前启用的策略目录查找，并校验 `market`（`cn`/`us`）是否在该策略的 `market_scope` 内。
+`POST /api/v1/screening/screen/check` 供脚本/API 客户端解释任意一条快照为什么通过或未通过策略硬过滤。需要开启 `SCREENING_ENABLED`；与已有选股接口共用管理员认证中间件，启用认证时无有效会话返回 `401`。策略 ID 从当前启用的策略目录查找，并校验 `market`（`cn`/`us`/`kr`）是否在该策略的 `market_scope` 内。
 
 ```json
 {
@@ -102,6 +103,7 @@ SCREENING_EASTMONEY_JITTER_SEC=0.3
 
 - 全市场快照在短 TTL 内优先复用最近成功结果；新缓存会记录完整且有序的数据源优先级，只在当前优先级与写入时一致时复用，因此同一来源链中的后备源结果可以加速后续请求，修改来源配置后则会重新读取实时数据。缓存过期后按配置优先级逐源尝试，单一数据源失败后继续降级，并记录 source health 与 last-good 缓存。当前 Sina、Efinance、AkShare/东财和 Tushare 快照接口均不提供增量游标或变更序列，因此 TTL 内可以零请求复用，TTL 到期后仍需重新读取全表；本地比较前后差异不能减少上游传输量，不作为“增量拉取”宣传。
 - 有 `TUSHARE_TOKEN` 时默认优先 Tushare，否则默认从 Sina 开始；显式 `SNAPSHOT_SOURCE_PRIORITY` 始终优先。
+- `market=kr` 使用独立快照链路：股票池与名称优先读取 DART/KRX seed（`scripts/stock_index_seeds/stock_list_kr.csv`），冻结产物回退到 `static/stocks.index.json`；实时价格、成交额、市值和换手来自 Naver Finance 的 KOSPI/KOSDAQ 市场列表。OpenDART 只提供公司/披露元数据，不提供实时行情，因此韩国策略不硬过滤 PER/PBR；量比等日线条件在候选缩小后由 DSA 日线链路补充。`SCREENING_KR_UNIVERSE_FILE` 可覆盖股票池文件（CSV seed 或 stock index JSON），留空时使用上述默认顺序。
 - 日 K 优先通过请求级 fetcher 复用 DSA 历史行情链路，无结果时再走筛选引擎的数据源降级；该桥接不会替换进程级函数，因此重叠选股请求之间不会共享 wrapper 或阻塞彼此。
 - 存在可用的 LLM 配置时，重排前对快照评分前 3 个候选补充 DSA 行情、基本面、新闻与事件（每类搜索最多 3 条），让事件风险可以进入既有 LLM `risk/risk_flags` 与后续风险评分。仅因子排序时继续使用 `pre_rank_light`，新闻和事件仍在名单确定后获取；不新增关键词否决或风险阈值。
 - 提示词中的新闻/事件证据包含有界标题、摘要、来源、链接，并保留已有的原始发布时间与检索时间；搜索适配器将上游结果的 `retrieved_at` 原样传递至排序、最终响应与运行历史，缺少时间字段时保持未知，不使用适配或缓存读取时刻补造检索时间。真实搜索结果模型包含可空 `retrieved_at`：供应商实际查询成功时记录 UTC 检索完成时间，后续日期归一化、过滤、相关性排序及缓存复用均保留原值；已有时间不会覆盖，旧结果缺少时间仍为未知。检索时间不代表事件发生或发布的时间。未采集、无结果、查询失败都不代表已排除风险，模型应区分证据覆盖差异与真实风险。已有提示词长度预算仍可能压缩证据，并记录裁剪说明。
@@ -125,7 +127,7 @@ Web 会在浏览器本地生成一个不含用户信息的匿名种子，并随�
 
 | 数据 | 位置 | 有效期/行为 |
 | --- | --- | --- |
-| 全市场快照 | `data/screening/snapshot.last_good.json` | 默认 5 分钟内直接复用且不标记 fallback；过期后请求实时源，实时源全部失败时仍可按最大陈旧时间约束回退并标记 stale/fallback |
+| 全市场快照 | `data/screening/snapshot.last_good.json`、`data/screening/snapshot.last_good.kr.json` | 默认 5 分钟内直接复用且不标记 fallback；过期后请求实时源，实时源全部失败时仍可按最大陈旧时间约束回退并标记 stale/fallback；韩国快照使用独立缓存文件，避免覆盖 A 股缓存 |
 | 个股日 K | `data/screening/daily_history/` | 按代码、来源和回看窗口分键，默认 TTL 24 小时，并核验最新已收盘交易日及缓存获取时段；刷新失败时可使用旧数据并标记 stale |
 | 行业/概念映射 | `data/screening/industry_provider_cache/` | 默认 TTL 24 小时，并保存板块热度历史用于趋势计算 |
 | 热点列表与历史 | `data/screening/hotspots.json`、`hotspot.history.jsonl` | 显式刷新写入；实时失败时回退最近可用快照 |
@@ -169,7 +171,7 @@ DSA 中存在两类用途不同的策略文件：
 - 任务与页面：复用 DSA 后台任务队列、Web 轮询和桌面端同源 Web 资源。
 - 存储与后续分析：运行结果写入 DSA 数据库；候选可进入 DSA 原生单股分析并携带策略 skill。
 
-对照固定参考提交，快照、日 K、美股、行业/概念、热点、候选新闻/公告/资金流、字段标准化、过滤、评分、风险、排序和数据源熔断等原始数据与选股能力均已纳入；其中公告/事件和资金流在 DSA 编排层分别接入原生事件搜索与基本面上下文。参考项目另外提供独立 CLI/server、JSON 文件 store、报告渲染、doctor、运行/数据源历史和 T+N 评估：本实现只吸收 DSA 确实缺少的运行历史与数据源历史，并接到 DSA 数据库；CLI/server 不重复建设。后续选股 T+N 评估应接入 DSA 已有 BacktestService，避免形成第二套回测真源；当前服务评估单股分析记录。实时 source health 已在 `/status` 返回，历史稳定性由 `/source-history` 补齐。
+对照固定参考提交，快照、日 K、美股、韩股、行业/概念、热点、候选新闻/公告/资金流、字段标准化、过滤、评分、风险、排序和数据源熔断等原始数据与选股能力均已纳入；其中公告/事件和资金流在 DSA 编排层分别接入原生事件搜索与基本面上下文。参考项目另外提供独立 CLI/server、JSON 文件 store、报告渲染、doctor、运行/数据源历史和 T+N 评估：本实现只吸收 DSA 确实缺少的运行历史与数据源历史，并接到 DSA 数据库；CLI/server 不重复建设。后续选股 T+N 评估应接入 DSA 已有 BacktestService，避免形成第二套回测真源；当前服务评估单股分析记录。实时 source health 已在 `/status` 返回，历史稳定性由 `/source-history` 补齐。
 
 ## 收益
 

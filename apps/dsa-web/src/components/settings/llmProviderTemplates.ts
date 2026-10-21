@@ -1,3 +1,5 @@
+import type { UiLanguage } from '../../i18n/uiText';
+
 export type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 export type LLMProviderCapability =
   | 'openai-compatible'
@@ -264,3 +266,175 @@ export const MODEL_PLACEHOLDERS_BY_PROTOCOL: Record<ChannelProtocol, string> = {
   vertex_ai: 'gemini-3.1-pro-preview',
   ollama: 'llama3.2,qwen2.5',
 };
+
+type LocalizedProviderPresentation = {
+  labels: Record<string, string>;
+  configHints: Record<string, string>;
+  sourceLabels: Record<string, string>;
+  capabilities: Record<LLMProviderCapability, { label: string; hint: string }>;
+};
+
+const PROVIDER_PRESENTATION: Record<Exclude<UiLanguage, 'zh'>, LocalizedProviderPresentation> = {
+  en: {
+    labels: {
+      modelflare: 'Modelflare (aggregator)',
+      aihubmix: 'AIHubmix (aggregator)',
+      anspire: 'Anspire Open',
+      deepseek: 'DeepSeek official',
+      dashscope: 'Qwen (DashScope)',
+      zhipu: 'Zhipu GLM',
+      moonshot: 'Moonshot (Kimi)',
+      minimax: 'MiniMax official',
+      volcengine: 'Volcengine Ark (Doubao)',
+      siliconflow: 'SiliconFlow',
+      openrouter: 'OpenRouter',
+      requesty: 'Requesty',
+      gemini: 'Gemini official',
+      anthropic: 'Anthropic official',
+      openai: 'OpenAI official',
+      ollama: 'Ollama (local)',
+      custom: 'Custom channel',
+    },
+    configHints: {
+      modelflare:
+        'The API key routing group must support the selected models; use the console or discovered models as the source of truth for model IDs. When the modelflare Base URL is empty, the default /v1 address is used. You can override it as needed; /chat/completions is not appended.',
+      anspire:
+        'The same ANSPIRE_API_KEYS can be reused for search and LLM channels. The models and gateway below are configuration examples; actual availability depends on account permissions and the console. Click "Test connection" first.',
+      volcengine:
+        'Make sure the online inference endpoint/region is not mixed with the Coding Plan dedicated endpoint.',
+      siliconflow: 'Model list and model visibility depend on account permissions and the API key.',
+      openrouter: 'Model list and model visibility depend on account permissions and the API key.',
+      requesty:
+        'Model list and model visibility depend on account permissions and the API key; for the EU region, change the Base URL to https://router.eu.requesty.ai/v1.',
+      ollama: 'The host, Docker container, or self-hosted runner must be able to reach the Ollama service.',
+    },
+    sourceLabels: {
+      'Modelflare 专属注册': 'Modelflare sign-up',
+    },
+    capabilities: {
+      'openai-compatible': {
+        label: 'OpenAI compatible',
+        hint: 'Configure the Base URL as an OpenAI-compatible endpoint; /chat/completions is not appended.',
+      },
+      aggregator: {
+        label: 'Aggregator',
+        hint: 'Model visibility, routing, and pricing may vary with account permissions and platform policy.',
+      },
+      'official-api': {
+        label: 'Official API',
+        hint: "Uses the provider's official protocol or official compatible endpoint.",
+      },
+      'model-discovery': {
+        label: 'Model discovery',
+        hint: 'Can try to fetch the model list via /models; actual results still depend on account permissions and the API key.',
+      },
+      vision: {
+        label: 'Vision hint',
+        hint: 'The template indicates this provider is often used for vision; actual model capabilities depend on the account and model list.',
+      },
+      'local-runtime': {
+        label: 'Local runtime',
+        hint: 'The current runtime must be able to access the local service.',
+      },
+    },
+  },
+  ko: {
+    labels: {
+      modelflare: 'Modelflare(애그리게이터)',
+      aihubmix: 'AIHubmix(애그리게이터)',
+      anspire: 'Anspire Open',
+      deepseek: 'DeepSeek 공식',
+      dashscope: 'Qwen(DashScope)',
+      zhipu: 'Zhipu GLM',
+      moonshot: 'Moonshot(Kimi)',
+      minimax: 'MiniMax 공식',
+      volcengine: 'Volcengine Ark(Doubao)',
+      siliconflow: 'SiliconFlow',
+      openrouter: 'OpenRouter',
+      requesty: 'Requesty',
+      gemini: 'Gemini 공식',
+      anthropic: 'Anthropic 공식',
+      openai: 'OpenAI 공식',
+      ollama: 'Ollama(로컬)',
+      custom: '사용자 지정 채널',
+    },
+    configHints: {
+      modelflare:
+        'API Key의 라우팅 그룹이 선택한 모델을 지원해야 합니다. 모델 ID는 콘솔 또는 모델 검색 결과를 기준으로 하세요. modelflare 채널의 Base URL을 비워 두면 기본 /v1 주소를 사용하며, 필요에 따라 재정의할 수 있습니다. /chat/completions는 추가로 붙지 않습니다.',
+      anspire:
+        '동일한 ANSPIRE_API_KEYS를 검색과 LLM 채널에 함께 사용할 수 있습니다. 아래 모델과 게이트웨이는 구성 예시이며 실제 사용 가능 여부는 계정 권한과 콘솔을 기준으로 합니다. 먼저 “연결 테스트”를 눌러 확인하세요.',
+      volcengine: '온라인 추론 endpoint/region과 Coding Plan 전용 엔드포인트를 혼용하지 마세요.',
+      siliconflow: '모델 목록과 모델 가시성은 계정 권한과 API Key에 따라 달라집니다.',
+      openrouter: '모델 목록과 모델 가시성은 계정 권한과 API Key에 따라 달라집니다.',
+      requesty:
+        '모델 목록과 모델 가시성은 계정 권한과 API Key에 따라 달라집니다. EU 리전에서는 Base URL을 https://router.eu.requesty.ai/v1로 변경할 수 있습니다.',
+      ollama: '호스트, Docker 또는 self-hosted runner에서 Ollama 서비스에 접근할 수 있어야 합니다.',
+    },
+    sourceLabels: {
+      'Modelflare 专属注册': 'Modelflare 전용 가입',
+    },
+    capabilities: {
+      'openai-compatible': {
+        label: 'OpenAI 호환',
+        hint: 'OpenAI-compatible endpoint 기준으로 Base URL을 구성하며 /chat/completions를 추가로 붙이지 않습니다.',
+      },
+      aggregator: {
+        label: '애그리게이터',
+        hint: '모델 가시성, 라우팅, 가격은 계정 권한과 플랫폼 정책에 따라 달라질 수 있습니다.',
+      },
+      'official-api': {
+        label: '공식 API',
+        hint: '제공업체의 공식 프로토콜 또는 공식 호환 엔드포인트를 사용합니다.',
+      },
+      'model-discovery': {
+        label: '모델 검색 가능',
+        hint: '/models를 통해 모델 목록을 가져올 수 있으며 실제 결과는 계정 권한과 API Key에 따라 달라집니다.',
+      },
+      vision: {
+        label: 'Vision 힌트',
+        hint: '이 provider가 Vision 시나리오에 자주 사용됨을 나타내는 템플릿 힌트이며 실제 모델 능력은 계정과 모델 목록을 기준으로 합니다.',
+      },
+      'local-runtime': {
+        label: '로컬 실행',
+        hint: '현재 실행 환경에서 해당 로컬 서비스에 접근할 수 있어야 합니다.',
+      },
+    },
+  },
+};
+
+export function getProviderTemplateLabel(template: LLMProviderTemplate, locale: UiLanguage = 'zh'): string {
+  if (locale === 'zh') {
+    return template.label;
+  }
+  return PROVIDER_PRESENTATION[locale].labels[template.channelId] ?? template.label;
+}
+
+export function getProviderTemplateConfigHint(
+  template: LLMProviderTemplate,
+  locale: UiLanguage = 'zh',
+): string | undefined {
+  if (!template.configHint || locale === 'zh') {
+    return template.configHint;
+  }
+  return PROVIDER_PRESENTATION[locale].configHints[template.channelId] ?? template.configHint;
+}
+
+export function getProviderSourceLabel(
+  source: LLMProviderTemplate['officialSources'][number],
+  locale: UiLanguage = 'zh',
+): string {
+  if (locale === 'zh') {
+    return source.label;
+  }
+  return PROVIDER_PRESENTATION[locale].sourceLabels[source.label] ?? source.label;
+}
+
+export function getProviderCapabilityMeta(
+  capability: LLMProviderCapability,
+  locale: UiLanguage = 'zh',
+): { label: string; hint: string } {
+  if (locale === 'zh') {
+    return LLM_PROVIDER_CAPABILITY_LABELS[capability];
+  }
+  return PROVIDER_PRESENTATION[locale].capabilities[capability];
+}
