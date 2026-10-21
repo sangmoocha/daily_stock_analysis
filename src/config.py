@@ -1001,6 +1001,13 @@ class Config:
     longbridge_oauth_client_id: Optional[str] = None
     stock_index_remote_update_enabled: bool = True
 
+    # === DART Insight 연동 (별도 프로세스인 dart-dashboard 조회 API) ===
+    # 회사명/고유번호를 넘겨 기업 개황·국민연금·재무·공시·지배구조를 받아 온다.
+    # 로직을 이 저장소에 다시 구현하지 않고 HTTP 로 위임한다.
+    dart_insight_base_url: Optional[str] = None
+    dart_insight_timeout_seconds: float = 20.0
+    dart_insight_enabled: bool = True
+
     # === Built-in stock screening ===
     screening_enabled: bool = False
 
@@ -1927,6 +1934,18 @@ class Config:
             longbridge_oauth_client_id=os.getenv('LONGBRIDGE_OAUTH_CLIENT_ID') or None,
             stock_index_remote_update_enabled=parse_env_bool(
                 os.getenv('STOCK_INDEX_REMOTE_UPDATE_ENABLED'),
+                default=True,
+            ),
+            dart_insight_base_url=os.getenv('DART_INSIGHT_BASE_URL') or None,
+            dart_insight_timeout_seconds=parse_env_float(
+                os.getenv('DART_INSIGHT_TIMEOUT_SECONDS'),
+                20.0,
+                field_name='DART_INSIGHT_TIMEOUT_SECONDS',
+                minimum=1.0,
+                maximum=300.0,
+            ),
+            dart_insight_enabled=parse_env_bool(
+                os.getenv('DART_INSIGHT_ENABLED'),
                 default=True,
             ),
             generation_backend=generation_backend,

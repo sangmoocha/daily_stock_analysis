@@ -26,6 +26,7 @@
 | [FAQ](FAQ.md) | 常见配置、模型、通知、部署和运行问题 |
 | [数据源稳定性与故障处理图示](data-source-stability.md) | Tushare、TickFlow、AkShare、Efinance、YFinance、Longbridge 等已接入源的使用场景、fallback 链路和推荐配置 |
 | [数据中心](data-center-diagnostics.md) | 只读 Provider 能力、数据集质量、精确市场支持与运行时优先级 |
+| [DART Insight 联动](dart-insight-integration.md) | 按公司名查询企业概况、国民年金、财务报表、公告与治理结构（委派给 dart-dashboard） |
 | [更新日志](CHANGELOG.md) | 版本变化、能力调整和迁移说明 |
 
 ## 配置

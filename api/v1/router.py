@@ -18,6 +18,7 @@ from api.v1.endpoints import (
     analysis,
     auth,
     backtest,
+    dart_insight,
     data,
     decision_signals,
     health,
@@ -115,6 +116,12 @@ router.include_router(
     intelligence.router,
     prefix="/intelligence",
     tags=["Intelligence"]
+)
+
+router.include_router(
+    dart_insight.router,
+    prefix="/dart-insight",
+    tags=["DartInsight"]
 )
 
 router.include_router(
