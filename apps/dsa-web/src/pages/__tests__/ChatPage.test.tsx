@@ -554,7 +554,7 @@ describe('ChatPage', () => {
         fireEvent.change(input, { target: { value: message } });
         fireEvent.click(screen.getByRole('button', { name: '发送' }));
         await waitFor(() => expect(mockStartStream).toHaveBeenLastCalledWith(
-          expect.objectContaining({ message, context: undefined }), expect.anything()));
+          expect.objectContaining({ message, context: { report_language: 'zh' } }), expect.anything()));
       }
       expect(screen.getByLabelText('当前讨论对象')).toHaveTextContent('未确认');
     },
@@ -578,7 +578,7 @@ describe('ChatPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/分析 600519/), { target: { value: '风险呢' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(mockStartStream).toHaveBeenLastCalledWith(
-      expect.objectContaining({ message: '风险呢', context: undefined }), expect.anything()));
+      expect.objectContaining({ message: '风险呢', context: { report_language: 'zh' } }), expect.anything()));
   });
 
   it('keeps input and explicit Skill draft on an acceptance conflict and provides manual refresh, not auto resend', async () => {
@@ -907,13 +907,13 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findAllByText('decision skipped: insufficient budget')).toHaveLength(1);
-    expect(screen.queryByText('decision timed out')).not.toBeInTheDocument();
+    expect(await screen.findAllByText('decision 已跳过：预算不足')).toHaveLength(1);
+    expect(screen.queryByText('decision 超时')).not.toBeInTheDocument();
 
     const thinkingToggle = container.querySelector('button[class*="mb-2"][class*="w-full"]') as HTMLButtonElement;
     fireEvent.click(thinkingToggle);
 
-    const budgetSkipped = screen.getAllByText('decision skipped: insufficient budget').find((node) =>
+    const budgetSkipped = screen.getAllByText('decision 已跳过：预算不足').find((node) =>
       node.closest('.chat-progress-item'),
     );
     expect(budgetSkipped).toBeDefined();
@@ -1068,7 +1068,7 @@ describe('ChatPage', () => {
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          context: { stock_code: '600519', stock_name: '贵州茅台' },
+          context: { stock_code: '600519', stock_name: '贵州茅台', report_language: 'zh' },
         }),
         expect.any(Object),
       );
@@ -1210,7 +1210,7 @@ describe('ChatPage', () => {
         }),
       );
     });
-    expect(mockStartStream.mock.calls.at(-1)?.[0]?.context).toEqual({ stock_code: '600519', stock_name: '贵州茅台' });
+    expect(mockStartStream.mock.calls.at(-1)?.[0]?.context).toEqual({ stock_code: '600519', stock_name: '贵州茅台', report_language: 'zh' });
   });
 
   it('keeps a quick question in the input until the server accepts it', async () => {
@@ -1264,6 +1264,7 @@ describe('ChatPage', () => {
           context: {
             stock_code: '688981',
             stock_name: '中芯国际',
+            report_language: 'zh',
           },
         }),
         expect.objectContaining({
@@ -1281,7 +1282,7 @@ describe('ChatPage', () => {
     fireEvent.change(input, { target: { value: '分析茅台' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(mockStartStream).toHaveBeenCalledWith(
-      expect.objectContaining({ message: '分析茅台', context: undefined }), expect.anything()));
+      expect.objectContaining({ message: '分析茅台', context: { report_language: 'zh' } }), expect.anything()));
   });
 
   it('does not guess when one stock name maps to multiple markets', async () => {
@@ -1305,7 +1306,7 @@ describe('ChatPage', () => {
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
-        expect.objectContaining({ context: undefined }),
+        expect.objectContaining({ context: { report_language: 'zh' } }),
         expect.any(Object),
       );
     });
@@ -1441,6 +1442,7 @@ describe('ChatPage', () => {
           context: {
             stock_code: '600519',
             stock_name: '贵州茅台',
+            report_language: 'zh',
           },
         }),
         expect.objectContaining({
@@ -1484,7 +1486,7 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
           message: '继续分析成交量',
-          context: undefined,
+          context: { report_language: 'zh' },
         }),
         expect.objectContaining({
           skillName: '趋势分析',
@@ -1501,7 +1503,7 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
           message: '如果不考虑 TTM 呢',
-          context: undefined,
+          context: { report_language: 'zh' },
         }),
         expect.objectContaining({
           skillName: '趋势分析',
@@ -1586,6 +1588,7 @@ describe('ChatPage', () => {
           context: {
             stock_code: 'AAPL',
             stock_name: null,
+            report_language: 'zh',
           },
         }),
         expect.objectContaining({
@@ -1604,7 +1607,7 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
           message: '继续看估值',
-          context: undefined,
+          context: { report_language: 'zh' },
         }),
         expect.objectContaining({
           skillName: '趋势分析',
@@ -1625,11 +1628,11 @@ describe('ChatPage', () => {
     expect(screen.getByLabelText('当前讨论对象')).toHaveTextContent('未确认');
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(mockStartStream).toHaveBeenCalledTimes(1));
-    expect(mockStartStream.mock.calls[0][0].context).toEqual({ stock_code: 'AAPL', stock_name: 'Apple' });
+    expect(mockStartStream.mock.calls[0][0].context).toEqual({ stock_code: 'AAPL', stock_name: 'Apple', report_language: 'zh' });
     fireEvent.change(input, { target: { value: '风险呢' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(mockStartStream).toHaveBeenCalledTimes(2));
-    expect(mockStartStream.mock.calls[1][0].context).toBeUndefined();
+    expect(mockStartStream.mock.calls[1][0].context).toEqual({ report_language: 'zh' });
     expect(screen.getByLabelText('当前讨论对象')).toHaveTextContent('未确认');
   });
 
@@ -1643,7 +1646,7 @@ describe('ChatPage', () => {
       fireEvent.change(input, { target: { value: message } });
       fireEvent.click(screen.getByRole('button', { name: '发送' }));
       await waitFor(() => expect(mockStartStream).toHaveBeenCalledWith(
-        expect.objectContaining({ message, context: undefined }), expect.anything()));
+        expect.objectContaining({ message, context: { report_language: 'zh' } }), expect.anything()));
       expect(screen.getByLabelText('当前讨论对象')).toHaveTextContent('贵州茅台');
     },
   );
@@ -1780,6 +1783,7 @@ describe('ChatPage', () => {
           context: {
             stock_code: expectedCanonical,
             stock_name: null,
+            report_language: 'zh',
           },
         }),
         expect.any(Object),
@@ -1884,7 +1888,7 @@ describe('ChatPage', () => {
       fireEvent.change(input, { target: { value: '继续看支撑位' } });
       fireEvent.click(screen.getByRole('button', { name: '发送' }));
       await waitFor(() => expect(mockStartStream).toHaveBeenLastCalledWith(
-        expect.objectContaining({ context: undefined }), expect.anything()));
+        expect.objectContaining({ context: { report_language: 'zh' } }), expect.anything()));
     },
   );
 
@@ -2174,5 +2178,42 @@ describe('watchlist button with code variants', () => {
       expect(mockRemoveFromWatchlist).toHaveBeenCalledWith('00700');
     });
     expect(mockAddToWatchlist).not.toHaveBeenCalled();
+  });
+
+  it('renders strategy names and chrome in Korean when Korean is selected', async () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'ko');
+    mockGetSkills.mockResolvedValue({
+      skills: [
+        { id: 'bull_trend', name: '默认多头趋势', description: '默认个股分析优先策略' },
+        { id: 'chan_theory', name: '缠论', description: '结构分析' },
+      ],
+      default_skill_id: 'bull_trend',
+    });
+
+    try {
+      render(
+        <UiLanguageProvider>
+          <MemoryRouter initialEntries={['/chat']}>
+            <ChatPage />
+          </MemoryRouter>
+        </UiLanguageProvider>,
+      );
+
+      expect(await screen.findByText('대화 기록')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: /종목 상담/ })).toBeInTheDocument();
+      expect(screen.getAllByText('전략').length).toBeGreaterThan(0);
+      expect(await screen.findByRole('checkbox', { name: '기본 상승 추세' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '찬룬 이론' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '일반 분석' })).not.toBeChecked();
+      expect(screen.getByText('컨텍스트 압축')).toBeInTheDocument();
+      expect(screen.getByText('긴 대화의 토큰 절약')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '전송' })).toBeInTheDocument();
+      expect(screen.getByText('대화 2개')).toBeInTheDocument();
+      expect(screen.queryByText('历史对话')).not.toBeInTheDocument();
+      expect(screen.queryByText('上下文压缩')).not.toBeInTheDocument();
+      expect(screen.queryByText('默认多头趋势')).not.toBeInTheDocument();
+    } finally {
+      window.localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
+    }
   });
 });
