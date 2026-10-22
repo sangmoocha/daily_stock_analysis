@@ -173,7 +173,7 @@ const readPersistedScreenTask = (): PersistedScreenTask | null => {
     return {
       taskId: parsed.taskId,
       runId: typeof parsed.runId === 'string' && parsed.runId.trim() ? parsed.runId : undefined,
-      market: typeof parsed.market === 'string' && parsed.market.trim() ? parsed.market : 'cn',
+      market: typeof parsed.market === 'string' && parsed.market.trim() ? parsed.market : 'kr',
       strategy: typeof parsed.strategy === 'string' && parsed.strategy.trim() ? parsed.strategy : 'dual_low',
       maxResults: Number.isFinite(restoredMaxResults) ? Math.min(100, Math.max(1, restoredMaxResults)) : 3,
     };
@@ -269,17 +269,17 @@ const getHotspotQualityLabel = (value: unknown, text: ScreeningText) => {
   return text.hotspotQualityLabels[label.toLowerCase()] || text.hotspotPendingQuality;
 };
 
-const getCandidateReason = (item: ScreeningCandidate, text: ScreeningText) => {
+const getCandidateReason = (item: ScreeningCandidate, text: ScreeningText, language: UiLanguage) => {
   if (item.llmThesis || item.llmScore != null) {
-    return item.reason || item.llmThesis || text.candidateLlmRanked;
+    return formatScorecardSummary(item.reason || item.llmThesis || text.candidateLlmRanked, text, language);
   }
   if (item.reason) {
-    return item.reason;
+    return formatScorecardSummary(item.reason, text, language);
   }
   const summaries = item.postAnalysisSummaries || {};
   const summary = Object.values(summaries).find((value) => typeof value === 'string' && value.trim());
   if (typeof summary === 'string') {
-    return summary;
+    return formatScorecardSummary(summary, text, language);
   }
   return text.candidateNoSummary;
 };
@@ -312,20 +312,100 @@ const getSelectionExplanations = (item: ScreeningCandidate, text: ScreeningText)
   }));
 };
 
+// The local scorecard summary (``本地后置评分: ...``) is deterministic Chinese
+// backend text; localize its label/known tokens by language. Unknown free text
+// (e.g. LLM reasons) is returned unchanged.
+const formatScorecardSummary = (
+  raw: string,
+  text: ScreeningText,
+  language: UiLanguage,
+): string => {
+  if (language === 'zh' || !raw) {
+    return raw;
+  }
+  const match = raw.match(/^\s*本地后置评分\s*[:：]\s*([\s\S]*)$/);
+  if (!match) {
+    return raw;
+  }
+  const remainder = match[1]
+    .trim()
+    .replace(/未发现额外加分项/g, text.explanationScorecardNoBonus)
+    .replace(/；\s*风险\s*[:：]\s*/g, `；${text.explanationScorecardRisk}: `);
+  return `${text.explanationScorecard}: ${remainder}`;
+};
+
+// Known backend explanation labels are emitted in Chinese; non-Chinese UI
+// localizes them by stable `code`. Unknown/free-text items keep their backend
+// text so provenance stays authoritative.
+const EXPLANATION_PREFIXES: Record<string, string> = {
+  top_factors: '核心因子：',
+  news: '消息：',
+  event: '事件：',
+  quote_change_pct: '涨跌幅：',
+  quote_amount: '成交额：',
+  llm_catalyst: '模型催化判断：',
+};
+
+const formatExplanationText = (
+  item: ScreeningExplanationItem,
+  text: ScreeningText,
+  language: UiLanguage,
+): string => {
+  const raw = item.text || '';
+  if (language === 'zh' || !raw.trim()) {
+    return raw;
+  }
+  const labels: Record<string, string> = {
+    top_factors: text.explanationTopFactors,
+    news: text.explanationNews,
+    event: text.explanationEvent,
+    quote_change_pct: text.explanationChangePct,
+    quote_amount: text.explanationAmount,
+    llm_catalyst: text.explanationCatalyst,
+  };
+  const prefix = EXPLANATION_PREFIXES[item.code || ''];
+  if (prefix) {
+    const trimmed = raw.trim();
+    return trimmed.startsWith(prefix)
+      ? `${labels[item.code || '']}${trimmed.slice(prefix.length)}`
+      : raw;
+  }
+  switch (item.code) {
+    case 'llm_ranking':
+      return text.explanationLlmRanking;
+    case 'selection_outcome':
+      return text.explanationSelectionOutcome;
+    case 'awaiting_evidence':
+      return text.explanationAwaitingEvidence;
+    case 'post_analysis_score_delta': {
+      const match = raw.match(/^\s*(.+?)\s*后分析已完成，评分调整\s*([+-]?[0-9.]+)\s*（未提供摘要）\s*$/);
+      return match
+        ? formatUiText(text.explanationPostAnalysisDelta, { analyzer: match[1], delta: match[2] })
+        : raw;
+    }
+    case 'selection_reason':
+      return formatScorecardSummary(raw, text, language);
+    default:
+      return raw;
+  }
+};
+
 const ExplanationItems = ({
   items,
   emptyText,
   text,
+  language,
 }: {
   items?: ScreeningExplanationItem[];
   emptyText: string;
   text: ScreeningText;
+  language: UiLanguage;
 }) => (
   items?.length ? (
     <ul className="mt-2 space-y-2">
       {items.map((item, index) => (
         <li key={`${item.code}-${item.source}-${index}`} className="rounded-lg border border-border/50 bg-background/30 p-2">
-          <p className="text-sm leading-6 text-foreground">{item.text}</p>
+          <p className="text-sm leading-6 text-foreground">{formatExplanationText(item, text, language)}</p>
           <p className="mt-1 text-xs text-secondary-text">
             {formatUiText(text.candidateSourceQuality, {
               source: item.source || text.unknown,
@@ -407,8 +487,13 @@ const normalizeScreenMessageKey = (value: string, text: ScreeningText) => {
 const formatEnrichmentSummary = (value: string, text: ScreeningText) =>
   value
     .replace(/DSA行情\s*[:：]\s*/gi, text.diagnosticEnrichmentPrice)
+    .replace(/DSA基本面覆盖\s*[:：]\s*/gi, text.diagnosticEnrichmentFundamentals)
     .replace(/DSA新闻\s*[:：]\s*/gi, text.diagnosticEnrichmentNews)
-    .replace(/DSA事件\s*[:：]\s*/gi, text.diagnosticEnrichmentEvent);
+    .replace(/DSA事件\s*[:：]\s*/gi, text.diagnosticEnrichmentEvent)
+    .replace(/现价/g, text.enrichmentPriceLabel)
+    .replace(/涨跌幅/g, text.enrichmentChangeLabel)
+    .replace(/；/g, text.enrichmentSeparator)
+    .replace(/，/g, text.sentenceSeparator);
 
 const formatScreenMessage = (value: string, text: ScreeningText) => {
   if (/^DSA provider context applied \d+ of \d+ candidates/i.test(value)) {
@@ -931,7 +1016,7 @@ const StockScreeningPage: React.FC = () => {
   const [statusAttempt, setStatusAttempt] = useState(0);
   const [enabled, setEnabled] = useState(false);
   const [available, setAvailable] = useState(false);
-  const [market, setMarket] = useState(restoredTask?.market || 'cn');
+  const [market, setMarket] = useState(restoredTask?.market || 'kr');
   const marketRef = useRef(market);
   marketRef.current = market;
   const [strategy, setStrategy] = useState(restoredTask?.strategy || 'dual_low');
@@ -2124,14 +2209,14 @@ const StockScreeningPage: React.FC = () => {
                                 <div className="grid gap-3 md:grid-cols-2">
                                   <div className="rounded-xl border border-cyan/25 bg-cyan/5 px-3 py-2.5">
                                     <p className="text-xs font-semibold text-cyan">{text.resultsWhySelected}</p>
-                                    <ExplanationItems items={selectionExplanations} emptyText={text.resultsWhySelectedEmpty} text={text} />
+                                    <ExplanationItems items={selectionExplanations} emptyText={text.resultsWhySelectedEmpty} text={text} language={language} />
                                     {selectionExplanations.length > 0 ? (
                                       <p className="mt-2 text-xs text-secondary-text">{formatUiText(text.resultsQuality, { quality: selectionQuality })}</p>
                                     ) : null}
                                   </div>
                                   <div className="rounded-xl border border-orange-400/25 bg-orange-500/5 px-3 py-2.5">
                                     <p className="text-xs font-semibold text-orange-500">{text.resultsWhyNow}</p>
-                                    <ExplanationItems items={item.whyNow} emptyText={text.resultsWhyNowEmpty} text={text} />
+                                    <ExplanationItems items={item.whyNow} emptyText={text.resultsWhyNowEmpty} text={text} language={language} />
                                     {item.whyNow?.length ? (
                                       <p className="mt-2 text-xs text-secondary-text">{formatUiText(text.resultsQuality, { quality: item.explanationQuality?.whyNow || text.unknown })}</p>
                                     ) : null}
@@ -2139,7 +2224,7 @@ const StockScreeningPage: React.FC = () => {
                                 </div>
                                 <div>
                                   <p className="text-xs font-semibold text-secondary-text">{text.resultsSummary}</p>
-                                  <p className="mt-1 text-sm leading-6 text-foreground">{getCandidateReason(item, text)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-foreground">{getCandidateReason(item, text, language)}</p>
                                 </div>
                                 <div>
                                   <p className="text-xs font-semibold text-secondary-text">{text.resultsSignal}</p>
@@ -2163,7 +2248,7 @@ const StockScreeningPage: React.FC = () => {
                                 {llmInsightAvailable ? (
                                   <div>
                                     <p className="text-xs font-semibold text-secondary-text">{text.resultsLlmInsight}</p>
-                                    <p className="mt-1 text-sm leading-6 text-foreground">{item.llmThesis || item.reason}</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">{formatScorecardSummary(item.llmThesis || item.reason, text, language)}</p>
                                     <p className="mt-1 text-xs text-secondary-text">
                                       {formatUiText(text.resultsSectorThemeConfidence, {
                                         sector: item.llmSector || '-',

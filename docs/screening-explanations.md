@@ -2,6 +2,8 @@
 
 选股候选同时返回 `why_selected`、`why_now` 和 `explanation_quality`。解释由后端在候选归一化和 DSA 数据补充完成后生成，Web 逐条展示 text、source 和 quality；分组综合质量只作摘要，不取代条目来源。Web 不再根据 `change_pct`、`amount` 或 LLM 字段自行猜测。
 
+后端生成的 `text` 以中文为基准。Web 在韩语/英语界面下按稳定 `code` 本地化确定性文案的展示标签（`top_factors`、`news`、`event`、`quote_change_pct`、`quote_amount`、`llm_catalyst`、`llm_ranking`、`selection_outcome`、`awaiting_evidence`、`post_analysis_score_delta` 及 `post_analyzer:scorecard` 的 `selection_reason` 前缀），不改写来源、质量、数值或后端原文；未知 `code` 和自由文本（如 LLM 生成的 `ranking_reason`/`llm_thesis`）仍按后端原样展示，中文界面保持原行为。同一规则也用于候选“摘要”（`reason` 的本地后置评分 scorecard 文案）和“增强摘要”（`dsa_analysis_summary` 的 `DSA行情`/`DSA基本面覆盖`/`DSA新闻`/`DSA事件` 前缀及 `现价`/`涨跌幅` 字段标签）；新闻/事件标题等原始内容不翻译。
+
 ## 字段
 
 每条 explanation item 包含：

@@ -1021,7 +1021,7 @@ describe('StockScreeningPage', () => {
     await waitFor(() => expect(screen.getByText(/自定义策略 \(custom_strategy_alpha\)/)).toBeInTheDocument());
   });
 
-  it('uses supported Screening strategy ids and cn market', async () => {
+  it('uses supported Screening strategy ids and the kr default market', async () => {
     getStrategies.mockResolvedValueOnce({
       enabled: true,
       strategies: [
@@ -1065,16 +1065,18 @@ describe('StockScreeningPage', () => {
       expect(strategySelect.value).toBe(id);
     });
 
+    expect(marketSelect.value).toBe('kr');
+
     fireEvent.click(screen.getByRole('button', { name: /运行选股/ }));
     await waitFor(() => expect(screenStocks).toHaveBeenCalledTimes(1));
     expect(screenStocks).toHaveBeenCalledWith({
-      market: 'cn',
+      market: 'kr',
       strategy: 'shrink_pullback',
       maxResults: 3,
     });
   });
 
-  it('filters strategies by market and selects a Korean strategy', async () => {
+  it('defaults to the Korean market and re-filters strategies when the market changes', async () => {
     getStrategies.mockResolvedValueOnce({
       enabled: true,
       strategies: [
@@ -1097,16 +1099,19 @@ describe('StockScreeningPage', () => {
 
     const marketSelect = screen.getByLabelText('市场') as HTMLSelectElement;
     const strategySelect = screen.getByLabelText('策略') as HTMLSelectElement;
-    expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
-      '双低',
-      '自定义策略…',
-    ]);
-
-    fireEvent.change(marketSelect, { target: { value: 'kr' } });
-
+    // kr is the default market, so the first Korean strategy is selected automatically.
+    expect(marketSelect.value).toBe('kr');
     await waitFor(() => expect(strategySelect.value).toBe('kr_large_cap_quality'));
     expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
       '韩国大盘质量',
+      '自定义策略…',
+    ]);
+
+    fireEvent.change(marketSelect, { target: { value: 'cn' } });
+
+    await waitFor(() => expect(strategySelect.value).toBe('dual_low'));
+    expect(Array.from(strategySelect.options).map((option) => option.textContent)).toEqual([
+      '双低',
       '自定义策略…',
     ]);
   });
@@ -2413,11 +2418,84 @@ describe('StockScreeningPage', () => {
       expect(screen.getByRole('heading', { name: '핫 테마' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /종목 선별 실행/ })).toBeInTheDocument();
       expect(screen.getByLabelText('시장')).toBeInTheDocument();
-      expect(screen.getByLabelText('전략')).toHaveValue('dual_low');
+      // The default mock only exposes a cn-scoped strategy; switch to cn to check its localized label.
+      fireEvent.change(screen.getByLabelText('시장'), { target: { value: 'cn' } });
+      await waitFor(() => expect(screen.getByLabelText('전략')).toHaveValue('dual_low'));
       expect(screen.getByRole('option', { name: '더블 로우 선별' })).toBeInTheDocument();
       expect(screen.queryByText('Dual Low')).not.toBeInTheDocument();
       expect(screen.queryByText('选股已开启')).not.toBeInTheDocument();
       expect(screen.queryByText('运行选股')).not.toBeInTheDocument();
+    } finally {
+      localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
+    }
+  });
+
+  it('localizes screening explanation labels into Korean while keeping provenance', async () => {
+    localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'ko');
+    getStrategies.mockResolvedValue({
+      enabled: true,
+      strategies: [
+        { id: 'kr_large_cap_quality', name: '韩国大盘质量', description: 'desc', category: '质量', marketScope: ['kr'] },
+      ],
+      strategyCount: 1,
+    });
+    getScreeningStatus.mockResolvedValue({ enabled: true, available: true });
+    const localizedCandidatesResult = {
+      enabled: true,
+      candidates: [
+        {
+          rank: 1,
+          code: '005930.KS',
+          name: '삼성전자',
+          score: 91.2,
+          reason: '本地后置评分: controlled_reversal',
+          dsaAnalysisSummary: 'DSA行情：现价 197000.0，涨跌幅 -0.2%',
+          whySelected: [
+            { code: 'selection_reason', text: '本地后置评分: value_quality', source: 'post_analyzer:scorecard', quality: 'observed' },
+            { code: 'top_factors', text: '核心因子：liquidity 92.1、size 95.7', source: 'screening', quality: 'observed' },
+          ],
+          whyNow: [
+            { code: 'news', text: '消息：삼성전자 중국 공장 업그레이드', source: '한국경제 증권 (KR)', quality: 'observed' },
+            { code: 'quote_change_pct', text: '涨跌幅：+1.20%', source: 'realtime_quote', quality: 'observed', value: 1.2 },
+          ],
+          explanationQuality: { whySelected: 'ok', whyNow: 'ok' },
+          raw: {},
+        },
+      ],
+      candidateCount: 1,
+    };
+    screenStocks.mockResolvedValue(localizedCandidatesResult);
+    getScreenTask.mockResolvedValue({
+      taskId: 'screen-task-1',
+      traceId: 'screen-task-1',
+      status: 'completed',
+      progress: 100,
+      message: '任务执行完成',
+      result: localizedCandidatesResult,
+    });
+
+    try {
+      render(
+        <UiLanguageProvider>
+          <StockScreeningPage />
+        </UiLanguageProvider>,
+      );
+
+      expect(await screen.findByText('종목 선별 사용 중')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /종목 선별 실행/ }));
+
+      expect(await screen.findByText('로컬 후처리 점수: value_quality')).toBeInTheDocument();
+      expect(screen.getByText('핵심 요인: liquidity 92.1、size 95.7')).toBeInTheDocument();
+      expect(screen.getByText('뉴스: 삼성전자 중국 공장 업그레이드')).toBeInTheDocument();
+      expect(screen.getByText('등락률: +1.20%')).toBeInTheDocument();
+      // Candidate summary ("요약") and enrichment summary ("강화 요약") also localize.
+      expect(screen.getByText('로컬 후처리 점수: controlled_reversal')).toBeInTheDocument();
+      expect(screen.getByText('시세: 현재가 197000.0, 등락률 -0.2%')).toBeInTheDocument();
+      // Chinese backend labels must not leak through in the Korean UI.
+      expect(screen.queryByText('核心因子：liquidity 92.1、size 95.7')).not.toBeInTheDocument();
+      expect(screen.queryByText('本地后置评分: value_quality')).not.toBeInTheDocument();
+      expect(screen.queryByText('本地后置评分: controlled_reversal')).not.toBeInTheDocument();
+      expect(screen.queryByText(/DSA行情/)).not.toBeInTheDocument();
     } finally {
       localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
     }

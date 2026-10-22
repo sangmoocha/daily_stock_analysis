@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 补充韩股 Naver 实时行情与投资者资金流的接口边界、可选环境变量、失败回退和回滚方式到 `docs/market-support.md`。
 - [修复] 修复韩语（`REPORT_LANGUAGE=ko`）个股汇总报告无法生成的问题：实时行情来源显示名映射只覆盖 `zh`/`en`，而查询按规范化后的报告语言取值，导致韩语报告在渲染行情快照时抛出 `KeyError: 'ko'`、本地报告不再保存；现补齐 `ko` 文案，新增语言覆盖守卫与回归测试。
 - [新功能] 新增 DART Insight 联动接口 `GET /api/v1/dart-insight/company`：用公司名（或 6 位股票代码 / 8 位 DART 固有编号）取回企业概况、国民年金加入者与员工规模对比、财务报表、公告、治理结构与持股公告；采集与 MariaDB 缓存由独立进程 dart-dashboard 负责，本仓库仅通过 HTTP 委派，不重复实现 DART 采集逻辑。新增 `DART_INSIGHT_BASE_URL` / `DART_INSIGHT_TIMEOUT_SECONDS` / `DART_INSIGHT_ENABLED` 配置（未配置时接口返回 503，不影响既有链路）。
+- [改进] 选股页面默认市场由 A 股改为韩国市场（KOSPI/KOSDAQ）：首次打开即选中 `kr`，并在策略列表加载后按 `market_scope` 自动选中首个韩股策略；手动切换市场仍按既有逻辑重新过滤策略，后端 `POST /api/v1/screening/screen` 的 `market` 默认值保持 `cn` 不变。
+- [改进] 选股结果在韩语/英语界面下本地化后端返回的确定性文案：解释卡片按条目 `code` 映射界面语言显示“核心因子、消息/事件、涨跌幅/成交额、模型催化判断、模型已参与排序、已进入候选结果、本地后置评分、暂无带来源证据、后分析评分调整”等；同时本地化候选“摘要”（本地后置评分 scorecard）与“增强摘要”（DSA行情/基本面覆盖/新闻/事件及现价/涨跌幅）；自由文本或未知 `code` 仍按后端原样展示，中文界面行为不变。
+- [改进] 韩股（`.KS`/`.KQ`）新闻、事件与情报搜索改用韩文查询：`search_stock_news`、`search_stock_events`、`search_comprehensive_intel`、增强搜索关键词与 Brave locale 按韩国市场生成韩文查询（例如 `삼성전자 005930.KS 뉴스`），避免此前“韩文股名 + 中文关键词”混合查询导致 Tavily 等返回英文行情页或无关稿件；A 股/港股/美股路径不变。
 
 ## [3.33.0] - 2026-10-15
 

@@ -43,6 +43,7 @@ from src.data.stock_mapping import (
     canonicalize_foreign_stock_code,
     foreign_stock_english_aliases,
 )
+from src.services.market_symbol_utils import is_kr_suffix_symbol
 from src.services.run_diagnostics import record_provider_run, record_provider_run_started
 
 logger = logging.getLogger(__name__)
@@ -2270,6 +2271,15 @@ class SearchService:
         "{name} technical analysis",
         "{name} {code} performance volume",
     ]
+
+    # 增强搜索关键词模板（韩股 韩文）
+    ENHANCED_SEARCH_KEYWORDS_KR = [
+        "{name} 주가",
+        "{name} {code} 최신 뉴스",
+        "{name} 실적 전망",
+        "{name} 주가 분석",
+        "{name} {code} 수급",
+    ]
     NEWS_OVERSAMPLE_FACTOR = 2
     NEWS_OVERSAMPLE_MAX = 10
     FUTURE_TOLERANCE_DAYS = 1
@@ -2577,6 +2587,17 @@ class SearchService:
         code = (stock_code or "").strip().upper()
         return bool(cls._US_STOCK_RE.match(code) or is_us_index_code(code))
 
+    @staticmethod
+    def _is_korean_stock(stock_code: str) -> bool:
+        """Return True for KOSPI/KOSDAQ suffix symbols (``.KS`` / ``.KQ``).
+
+        Korean names are commonly already Hangul, so the default Chinese query
+        path produces mixed-language queries (e.g. ``삼성전자 005930.KS 股票 最新消息``)
+        that miss Korean headlines. Korean stocks therefore get their own query
+        branch instead of the A-share default.
+        """
+        return is_kr_suffix_symbol(stock_code)
+
     @classmethod
     def _should_prefer_chinese_news(
         cls,
@@ -2661,6 +2682,8 @@ class SearchService:
         """Resolve Brave locale hints without forcing US bias onto non-US symbols."""
         if prefer_chinese:
             return {"search_lang": "zh-hans", "country": "CN"}
+        if cls._is_korean_stock(stock_code):
+            return {"search_lang": "ko", "country": "KR"}
         if cls._is_us_stock(stock_code):
             return {"search_lang": "en", "country": "US"}
         return {}
@@ -4049,6 +4072,7 @@ class SearchService:
 
         # 构建搜索查询（优化搜索效果）
         is_foreign = self._is_foreign_stock(stock_code)
+        is_korean = self._is_korean_stock(stock_code)
         # Issue #2026: When STOCK_NAME_MAP maps a foreign ticker to a Chinese
         # display name (e.g. AAPL -> 苹果), the English news search query would
         # otherwise contain the Chinese name and miss English headlines.
@@ -4061,10 +4085,18 @@ class SearchService:
         # Issue #2026: Foreign tickers must bypass prefer_chinese even when the
         # display name is Chinese (e.g. AAPL -> 苹果), otherwise the foreign
         # branch below is unreachable and English headlines are missed.
-        prefer_chinese = prefer_chinese and not (is_foreign and english_aliases)
+        prefer_chinese = prefer_chinese and not (is_foreign and english_aliases) and not is_korean
         if focus_keywords:
             # 如果提供了关键词，直接使用关键词作为查询
             query = " ".join(focus_keywords)
+        elif is_korean:
+            # 韩股名称通常已是韩文/英文；用韩文查询命中 Naver/韩媒新闻，
+            # 避免默认中文查询返回英文行情页或无关稿。
+            query = (
+                f"{stock_name} {stock_code} 뉴스"
+                if stock_code
+                else f"{stock_name} 뉴스"
+            )
         elif prefer_chinese:
             # 指数 target 的 stock_code 可能为空（Agent 工具 _resolve_search_subject
             # 有意只传显示名），空 code 直接省略，避免拼出 "上证50  股票" 双空格。
@@ -4336,7 +4368,9 @@ class SearchService:
             SearchResponse 对象
         """
         if event_types is None:
-            if self._is_foreign_stock(stock_code):
+            if self._is_korean_stock(stock_code):
+                event_types = ["실적 발표", "주요 공시", "지분 변동"]
+            elif self._is_foreign_stock(stock_code):
                 event_types = ["earnings report", "insider selling", "quarterly results"]
             else:
                 event_types = ["年报预告", "减持公告", "业绩快报"]
@@ -4407,6 +4441,7 @@ class SearchService:
         search_count = 0
 
         is_foreign = self._is_foreign_stock(stock_code)
+        is_korean = self._is_korean_stock(stock_code)
         is_index_etf = self.is_index_or_etf(stock_code, stock_name)
 
         if is_foreign:
@@ -4458,6 +4493,64 @@ class SearchService:
                     'query': (
                         f"{effective_name} {stock_code} index sector allocation holdings"
                         if is_index_etf else f"{effective_name} industry competitors market share outlook"
+                    ),
+                    'desc': '行业分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+            ]
+        elif is_korean:
+            # 韩股使用韩文维度查询，命中韩媒/Naver 新闻；默认中文维度会返回行情页或无关英文稿。
+            search_dimensions = [
+                {
+                    'name': 'latest_news',
+                    'query': f"{stock_name} {stock_code} 최신 뉴스",
+                    'desc': '最新消息',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'market_analysis',
+                    'query': f"{stock_name} 목표주가 리포트 분석",
+                    'desc': '机构分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'risk_check',
+                    'query': (
+                        f"{stock_name} 지수 추이 추적오차"
+                        if is_index_etf else f"{stock_name} 리스크 악재 소송 조사"
+                    ),
+                    'desc': '风险排查',
+                    'tavily_topic': None if is_index_etf else 'news',
+                    'strict_freshness': not is_index_etf,
+                },
+                {
+                    'name': 'announcements',
+                    'query': (
+                        f"{stock_name} 지수 구성 변경"
+                        if is_index_etf else f"{stock_name} {stock_code} 주요 공시"
+                    ),
+                    'desc': '公司公告',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'earnings',
+                    'query': (
+                        f"{stock_name} 지수 구성 비중 추적"
+                        if is_index_etf else f"{stock_name} 실적 발표 실적 전망"
+                    ),
+                    'desc': '业绩预期',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'industry',
+                    'query': (
+                        f"{stock_name} 지수 업종 비중"
+                        if is_index_etf else f"{stock_name} 업황 경쟁사 시장 점유율 전망"
                     ),
                     'desc': '行业分析',
                     'tavily_topic': None,
@@ -4767,8 +4860,12 @@ class SearchService:
         successful_providers = []
         
         # 使用多个关键词模板搜索
-        is_foreign = self._is_foreign_stock(stock_code)
-        keywords = self.ENHANCED_SEARCH_KEYWORDS_EN if is_foreign else self.ENHANCED_SEARCH_KEYWORDS
+        if self._is_korean_stock(stock_code):
+            keywords = self.ENHANCED_SEARCH_KEYWORDS_KR
+        elif self._is_foreign_stock(stock_code):
+            keywords = self.ENHANCED_SEARCH_KEYWORDS_EN
+        else:
+            keywords = self.ENHANCED_SEARCH_KEYWORDS
         for i, keyword_template in enumerate(keywords[:max_attempts]):
             query = keyword_template.format(name=stock_name, code=stock_code)
             
